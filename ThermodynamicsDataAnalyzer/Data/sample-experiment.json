@@ -1,0 +1,15 @@
+{
+  "experimentId": "water-heating-001",
+  "material": "water",
+  "massKg": 0.2,
+  "heaterPowerW": 100,
+  "theoreticalSpecificHeatJPerKgK": 4180,
+  "measurements": [
+    { "timeSeconds": 0, "temperatureC": 20.0 },
+    { "timeSeconds": 20, "temperatureC": 22.2 },
+    { "timeSeconds": 40, "temperatureC": 24.4 },
+    { "timeSeconds": 60, "temperatureC": 26.6 },
+    { "timeSeconds": 80, "temperatureC": 28.8 },
+    { "timeSeconds": 100, "temperatureC": 31.0 }
+  ]
+}
