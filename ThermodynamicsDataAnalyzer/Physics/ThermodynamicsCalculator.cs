@@ -25,4 +25,9 @@ public class ThermodynamicsCalculator
     {
         return powerWatts * elapsedTimeSeconds;
     }
+    
+    public static double CalculateIntervalEnergySupplied(double powerWatts, double IntervalDurationSeconds)
+    {
+        return powerWatts * IntervalDurationSeconds;
+    }
 }
