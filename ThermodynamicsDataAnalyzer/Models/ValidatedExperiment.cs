@@ -6,7 +6,7 @@ public sealed record ValidatedExperiment
     public string Material { get; }
     public double MassKg { get; }
     public double HeaterPowerW { get; }
-    public double TheoreticalSpecificHeatJPerKgK { get; }
+    public double HeatCapacityJPerKgK { get; }
     public IReadOnlyList<TemperatureMeasurement> Measurements { get; }
 
     internal ValidatedExperiment(ExperimentInput input)
@@ -15,7 +15,7 @@ public sealed record ValidatedExperiment
         Material = input.Material;
         MassKg = input.MassKg;
         HeaterPowerW = input.HeaterPowerW;
-        TheoreticalSpecificHeatJPerKgK = input.TheoreticalSpecificHeatJPerKgK;
+        HeatCapacityJPerKgK = input.HeatCapacityJPerKgK;
         Measurements = input.Measurements.ToList().AsReadOnly();
     }
 }

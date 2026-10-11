@@ -5,6 +5,6 @@ public record ExperimentInput(
     string Material,
     double MassKg,
     double HeaterPowerW,
-    double TheoreticalSpecificHeatJPerKgK,
+    double HeatCapacityJPerKgK,
     IReadOnlyList<TemperatureMeasurement> Measurements
     );
