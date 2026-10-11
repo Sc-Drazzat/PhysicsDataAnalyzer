@@ -7,8 +7,8 @@ public enum AnalysisPolicy
 }
 public record AnalysisResult(
     AnalysisPolicy Policy,
-    double EstimatedHeatCapacityJPerKgK,
-    double HeatCapacityJPerKgK,
+    double EstimatedSpecificHeatCapacityJPerKgK,
+    double SpecificHeatCapacityJPerKgK,
     double AbsoluteErrorJPerKgK, 
     double PercentageError 
     );

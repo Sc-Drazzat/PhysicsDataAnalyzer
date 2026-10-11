@@ -40,7 +40,7 @@ public class ExperimentValidator
             return false;
         }
 
-        if (input.HeatCapacityJPerKgK <= 0)
+        if (input.SpecificHeatCapacityJPerKgK <= 0)
         {
             errorMessage = "Heat capacity must be  more than zero";
             return false;
