@@ -20,4 +20,9 @@ public class ThermodynamicsCalculator
         
         return finalTemperature - initialTemperature;
     }
+
+    public static double CalculateEnergySupplied(double powerWatts, double elapsedTimeSeconds)
+    {
+        return powerWatts * elapsedTimeSeconds;
+    }
 }
