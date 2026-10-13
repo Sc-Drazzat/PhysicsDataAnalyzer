@@ -2,7 +2,7 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThermodynamicsDataAnalyzer", "ThermodynamicsDataAnalyzer\ThermodynamicsDataAnalyzer.csproj", "{D6D04F28-8472-4F8D-949C-987D545812F5}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThermodynamicsDataTests", "ThermodynamicsDataTests\ThermodynamicsDataTests.csproj", "{D4F50AF2-6B6A-4BF5-97D9-F9BBF5C4BF3E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThermodynamicsDataAnalyzer.Tests", "ThermodynamicsDataAnalyzer.Tests\ThermodynamicsDataAnalyzer.Tests.csproj", "{D4F50AF2-6B6A-4BF5-97D9-F9BBF5C4BF3E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
