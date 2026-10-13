@@ -3,7 +3,7 @@
   "material": "water",
   "massKg": 0.2,
   "heaterPowerW": 100,
-  "theoreticalHeatCapacityJPerKgK": 4180,
+  "specificHeatCapacityJPerKgK": 4180,
   "measurements": [
     { "timeSeconds": 0, "temperatureCelsius": 20.0 },
     { "timeSeconds": 20, "temperatureCelsius": 22.2 },
