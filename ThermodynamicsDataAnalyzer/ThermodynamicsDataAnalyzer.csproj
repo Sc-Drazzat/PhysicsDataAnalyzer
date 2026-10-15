@@ -8,4 +8,8 @@
         <RootNamespace>PhysicsDataAnalyzer</RootNamespace>
     </PropertyGroup>
 
+    <ItemGroup>
+      <Folder Include="Data\reports\" />
+    </ItemGroup>
+
 </Project>

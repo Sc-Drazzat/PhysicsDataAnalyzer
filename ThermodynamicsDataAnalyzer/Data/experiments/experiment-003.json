@@ -1,0 +1,11 @@
+{
+  "experimentId": "oil-minimum-measurements-003",
+  "material": "oil",
+  "massKg": 0.5,
+  "heaterPowerW": 50,
+  "specificHeatCapacityJPerKgK": 2000,
+  "measurements": [
+    { "timeSeconds": 0, "temperatureCelsius": 20 },
+    { "timeSeconds": 30, "temperatureCelsius": 25 }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "experimentId": "invalid-zero-mass-004",
+  "material": "water",
+  "massKg": 0,
+  "heaterPowerW": 100,
+  "specificHeatCapacityJPerKgK": 4180,
+  "measurements": [
+    { "timeSeconds": 0, "temperatureCelsius": 20 },
+    { "timeSeconds": 20, "temperatureCelsius": 22 },
+    { "timeSeconds": 40, "temperatureCelsius": 24 }
+  ]
+}

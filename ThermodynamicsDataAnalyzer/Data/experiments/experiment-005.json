@@ -1,0 +1,13 @@
+{
+  "experimentId": "aluminum-uneven-heating-005",
+  "material": "aluminum",
+  "massKg": 0.3,
+  "heaterPowerW": 80,
+  "specificHeatCapacityJPerKgK": 900,
+  "measurements": [
+    { "timeSeconds": 0, "temperatureCelsius": 18 },
+    { "timeSeconds": 15, "temperatureCelsius": 20 },
+    { "timeSeconds": 30, "temperatureCelsius": 23 },
+    { "timeSeconds": 45, "temperatureCelsius": 27 }
+  ]
+}
