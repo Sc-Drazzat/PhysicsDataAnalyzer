@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PhysicsDataAnalyzer.Models;
 
 namespace PhysicsDataAnalyzer.IO;
@@ -9,6 +10,11 @@ public static class ReportWriter
     {
         WriteIndented = true
     };
+
+    static ReportWriter()
+    {
+        JsonOptions.Converters.Add(new JsonStringEnumConverter());
+    }
 
     public static bool TryWriteReport(
         ExperimentReport? report,

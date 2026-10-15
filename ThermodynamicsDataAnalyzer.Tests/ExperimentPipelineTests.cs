@@ -1,5 +1,6 @@
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
+using AnalysisPolicies = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 namespace PhysicsDataAnalyzer.Tests;
@@ -7,10 +8,14 @@ namespace PhysicsDataAnalyzer.Tests;
 public class ExperimentPipelineTests
 {
     [Fact]
-    public void AnalyzesBothPoliciesAndBuildsReport()
+    public void AnalyzesWholeExperimentPolicyAndBuildsReport()
     {
         bool success = ExperimentPipeline.TryAnalyze(
-            TestData.ValidExperiment(), out var error, out var report);
+            TestData.ValidExperiment(),
+            AnalysisPolicyType.WholeExperiment,
+            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
+            out var error,
+            out var report);
 
         Assert.True(success);
         Assert.Null(error);
@@ -18,10 +23,25 @@ public class ExperimentPipelineTests
         Assert.Equal("test-001", report.ExperimentId);
         Assert.Equal(4, report.TemperatureChangeCelsius);
         Assert.Equal(40, report.ElapsedTimeSeconds);
-        Assert.Equal(5000, report.WholeExperimentResult.EstimatedSpecificHeatCapacityJPerKgK, 6);
-        Assert.Equal(5000, report.MeanIntervalResult.EstimatedSpecificHeatCapacityJPerKgK, 6);
-        Assert.Equal(AnalysisPolicyType.WholeExperiment, report.WholeExperimentResult.Policy);
-        Assert.Equal(AnalysisPolicyType.MeanInterval, report.MeanIntervalResult.Policy);
+        Assert.Equal(5000, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 6);
+        Assert.Equal(AnalysisPolicyType.WholeExperiment, report.Result.Policy);
+    }
+
+    [Fact]
+    public void AnalyzesMeanIntervalPolicyAndBuildsReport()
+    {
+        bool success = ExperimentPipeline.TryAnalyze(
+            TestData.ValidExperiment(),
+            AnalysisPolicyType.MeanInterval,
+            AnalysisPolicies.TryEstimateMeanIntervalPolicy,
+            out var error,
+            out var report);
+
+        Assert.True(success);
+        Assert.Null(error);
+        Assert.NotNull(report);
+        Assert.Equal(5000, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 6);
+        Assert.Equal(AnalysisPolicyType.MeanInterval, report.Result.Policy);
     }
 
     [Fact]
@@ -29,7 +49,12 @@ public class ExperimentPipelineTests
     {
         var invalidInput = TestData.ValidExperiment(massKg: 0);
 
-        bool success = ExperimentPipeline.TryAnalyze(invalidInput, out var error, out var report);
+        bool success = ExperimentPipeline.TryAnalyze(
+            invalidInput,
+            AnalysisPolicyType.WholeExperiment,
+            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
+            out var error,
+            out var report);
 
         Assert.False(success);
         Assert.NotNull(error);
@@ -45,7 +70,12 @@ public class ExperimentPipelineTests
             new TemperatureMeasurement(20, 20)
         });
 
-        bool success = ExperimentPipeline.TryAnalyze(input, out var error, out var report);
+        bool success = ExperimentPipeline.TryAnalyze(
+            input,
+            AnalysisPolicyType.MeanInterval,
+            AnalysisPolicies.TryEstimateMeanIntervalPolicy,
+            out var error,
+            out var report);
 
         Assert.False(success);
         Assert.NotNull(error);
@@ -64,7 +94,12 @@ public class ExperimentPipelineTests
         var input = TestData.ValidExperiment(measurements);
         var before = input.Measurements.ToArray();
 
-        Assert.True(ExperimentPipeline.TryAnalyze(input, out _, out _));
+        Assert.True(ExperimentPipeline.TryAnalyze(
+            input,
+            AnalysisPolicyType.WholeExperiment,
+            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
+            out _,
+            out _));
 
         Assert.Equal(before, input.Measurements);
     }

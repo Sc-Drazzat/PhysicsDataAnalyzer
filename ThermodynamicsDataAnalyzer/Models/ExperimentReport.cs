@@ -8,5 +8,4 @@ public sealed record ExperimentReport(
     double TemperatureChangeCelsius,
     double ElapsedTimeSeconds,
     double TotalEnergySuppliedJoules,
-    AnalysisResult WholeExperimentResult,
-    AnalysisResult MeanIntervalResult);
+    AnalysisResult Result);

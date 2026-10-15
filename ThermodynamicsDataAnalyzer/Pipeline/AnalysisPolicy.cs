@@ -5,7 +5,7 @@ namespace PhysicsDataAnalyzer.Pipeline;
 
 public class AnalysisPolicy
 {
-    public delegate double SpecificHeatPolicy(ValidatedExperiment experiment);
+    public delegate bool SpecificHeatPolicy(ValidatedExperiment experiment, out double estimate);
     
     public static bool TryEstimateWholeExperimentPolicy(ValidatedExperiment experiment, out double estimate)
     {

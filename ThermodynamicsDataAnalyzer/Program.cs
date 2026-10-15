@@ -1,7 +1,10 @@
 ﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 using PhysicsDataAnalyzer.IO;
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
+using AnalysisPolicy = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
+using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 string inputPath = args.Length > 0
     ? Path.GetFullPath(args[0])
@@ -20,8 +23,32 @@ if (!ExperimentFileReader.TryReadExperiment(
     return 1;
 }
 
+AnalysisPolicy.SpecificHeatPolicy selectedPolicy;
+AnalysisPolicyType selectedPolicyType;
+
+string policyName = args.Length > 2
+    ? args[2].ToLowerInvariant()
+    : "whole";
+
+switch (policyName) 
+{
+    case "whole":
+        selectedPolicyType = AnalysisPolicyType.WholeExperiment;
+        selectedPolicy = AnalysisPolicy.TryEstimateWholeExperimentPolicy;
+        break;
+    case "mean":
+        selectedPolicyType = AnalysisPolicyType.MeanInterval;
+        selectedPolicy = AnalysisPolicy.TryEstimateMeanIntervalPolicy;
+        break;
+    default:
+        Console.WriteLine("Policy must be 'whole' or 'mean'");
+        return 1;
+}
+
 if (!ExperimentPipeline.TryAnalyze(
         input,
+        selectedPolicyType,
+        selectedPolicy,
         out errorMessage,
         out ExperimentReport? report))
 {
@@ -35,9 +62,10 @@ if (report is null)
     return 1;
 }
 
-Console.WriteLine(JsonSerializer.Serialize(
-    report,
-    new JsonSerializerOptions { WriteIndented = true }));
+var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+jsonOptions.Converters.Add(new JsonStringEnumConverter());
+
+Console.WriteLine(JsonSerializer.Serialize(report, jsonOptions));
 
 if (!ReportWriter.TryWriteReport(report, outputPath, out errorMessage))
 {

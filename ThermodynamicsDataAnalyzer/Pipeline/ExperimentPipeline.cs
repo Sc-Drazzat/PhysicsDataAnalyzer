@@ -8,7 +8,7 @@ namespace PhysicsDataAnalyzer.Pipeline;
 
 public class ExperimentPipeline
 {
-    public static bool TryAnalyze(ExperimentInput? input, out string? errorMessage, out ExperimentReport? report)
+    public static bool TryAnalyze(ExperimentInput? input, AnalysisPolicyType policyType, AnalysisPolicy.SpecificHeatPolicy? policy, out string? errorMessage, out ExperimentReport? report)
     {
         errorMessage = null;
         report = null;
@@ -24,18 +24,18 @@ public class ExperimentPipeline
             return false;
         }
 
-        if (!AnalysisPolicy.TryEstimateWholeExperimentPolicy(experiment, out var wholeExperimentEstimation))
+        if (policy == null)
         {
-            errorMessage = "Could not calculate whole experiment estimation";
+            errorMessage = "Police cannot be null";
             return false;
         }
 
-        if (!AnalysisPolicy.TryEstimateMeanIntervalPolicy(experiment, out var meanIntervalEstimation))
+        if (!policy(experiment, out double estimate))
         {
-            errorMessage = "Could not calculate mean interval experiment estimation";
+            errorMessage = "Could not calculate policy";
             return false;
         }
-
+        
         double knownValue = experiment.SpecificHeatCapacityJPerKgK;
         
         var measurements = experiment.Measurements;
@@ -45,6 +45,7 @@ public class ExperimentPipeline
         double elapsedTime = measurements.Last().TimeSeconds - measurements.First().TimeSeconds;
         double totalEnergy = ThermodynamicsCalculator.CalculateEnergySupplied(experiment.HeaterPowerW, elapsedTime);
 
+        var result = CreateResult(policyType, estimate, knownValue);
         report = new ExperimentReport(
             experiment.ExperimentId,
             experiment.Material,
@@ -53,17 +54,7 @@ public class ExperimentPipeline
             temperatureChange,
             elapsedTime,
             totalEnergy,
-            CreateResult(
-                AnalysisPolicyType.WholeExperiment,
-                wholeExperimentEstimation,
-                knownValue
-                ),
-            CreateResult(
-                AnalysisPolicyType.MeanInterval,
-                meanIntervalEstimation,
-                knownValue
-                )
-            );
+            result);
         return true;
     }
 
