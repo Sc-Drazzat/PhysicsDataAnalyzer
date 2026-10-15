@@ -21,6 +21,23 @@ public static class ReportWriter
         string? path,
         out string? errorMessage)
     {
+        return TryWriteJson(report, path, out errorMessage);
+    }
+    
+    public static bool TryWriteBatchReport(
+        ExperimentBatchReport? report,
+        string? path,
+        out string? errorMessage)
+    {
+        return TryWriteJson(report, path, out errorMessage);
+    }
+
+    public static bool TryWriteJson<T>(
+        T? report, 
+        string? path, 
+        out string? errorMessage) 
+        where T : class
+    {
         errorMessage = null;
 
         if (report == null)
