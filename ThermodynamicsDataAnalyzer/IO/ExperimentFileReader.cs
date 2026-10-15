@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using PhysicsDataAnalyzer.Models;
 
@@ -56,6 +57,59 @@ public static class ExperimentFileReader
         catch (UnauthorizedAccessException)
         {
             errorMessage = $"Access denied while reading input file: {path}";
+            return false;
+        }
+    }
+
+    public static bool TryReadDataset(string? directoryPath, out IReadOnlyList<ExperimentFileRecord> records,
+        out string? errorMessage)
+    {
+        records = Array.Empty<ExperimentFileRecord>();
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(directoryPath))
+        {
+            Console.WriteLine("Directory path cannot be empty");
+            return false;
+        }
+
+        if (!Directory.Exists(directoryPath))
+        {
+            Console.WriteLine($"Directory path: {directoryPath} does not exist");
+            return false;
+        }
+
+        try
+        {
+            string[] paths = Directory
+                .GetFiles(directoryPath, "*.json")
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            var results = new List<ExperimentFileRecord>();
+
+            foreach (string path in paths)
+            {
+                bool success = TryReadExperiment(directoryPath, out ExperimentInput? input, out string? readError);
+
+                results.Add(new ExperimentFileRecord(
+                    Path.GetFileName(path) ?? path,
+                    success ? input : null,
+                    success ? null : readError ?? "Could not read experiment file"));
+            }
+
+            records = results.AsReadOnly();
+            return true;
+        }
+        catch (IOException)
+        {
+            errorMessage = $"Could not read dataset directory: {directoryPath}";
+            return false;
+        }
+
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = $"Access denied while reading directory: {directoryPath}";
             return false;
         }
     }
