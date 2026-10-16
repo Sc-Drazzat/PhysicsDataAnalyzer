@@ -69,13 +69,13 @@ public static class ExperimentFileReader
 
         if (string.IsNullOrWhiteSpace(directoryPath))
         {
-            Console.WriteLine("Directory path cannot be empty");
+            errorMessage = "Dataset directory path cannot be empty";
             return false;
         }
 
         if (!Directory.Exists(directoryPath))
         {
-            Console.WriteLine($"Directory path: {directoryPath} does not exist");
+            errorMessage = $"Dataset directory was not found: {directoryPath}";
             return false;
         }
 
@@ -90,7 +90,7 @@ public static class ExperimentFileReader
 
             foreach (string path in paths)
             {
-                bool success = TryReadExperiment(directoryPath, out ExperimentInput? input, out string? readError);
+                bool success = TryReadExperiment(path, out ExperimentInput? input, out string? readError);
 
                 results.Add(new ExperimentFileRecord(
                     Path.GetFileName(path) ?? path,

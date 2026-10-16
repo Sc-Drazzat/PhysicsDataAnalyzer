@@ -6,31 +6,26 @@ using PhysicsDataAnalyzer.Pipeline;
 using AnalysisPolicy = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
-string inputPath = args.Length > 0
+string datasetDirectory = args.Length > 0
     ? Path.GetFullPath(args[0])
-    : FindSampleInputPath();
-
-string outputPath = args.Length > 1
-    ? args[1]
-    : Path.Combine(Path.GetDirectoryName(inputPath)!, "report.json");
-
-if (!ExperimentFileReader.TryReadExperiment(
-        inputPath,
-        out ExperimentInput? input,
-        out string? errorMessage))
-{
-    Console.Error.WriteLine($"Input error: {errorMessage}");
-    return 1;
-}
-
-AnalysisPolicy.SpecificHeatPolicy selectedPolicy;
-AnalysisPolicyType selectedPolicyType;
+    : FindDefaultDatasetPath();
 
 string policyName = args.Length > 2
     ? args[2].ToLowerInvariant()
     : "whole";
 
-switch (policyName) 
+string outputPath = args.Length > 1
+    ? Path.GetFullPath(args[1])
+    : Path.GetFullPath(Path.Combine(
+        datasetDirectory,
+        "..",
+        "reports",
+        $"batch-report-{policyName}.json"));
+
+AnalysisPolicy.SpecificHeatPolicy selectedPolicy;
+AnalysisPolicyType selectedPolicyType;
+
+switch (policyName)
 {
     case "whole":
         selectedPolicyType = AnalysisPolicyType.WholeExperiment;
@@ -45,12 +40,22 @@ switch (policyName)
         return 1;
 }
 
-if (!ExperimentPipeline.TryAnalyze(
-        input,
+
+if (!ExperimentFileReader.TryReadDataset(
+        datasetDirectory,
+        out var records,
+        out string? errorMessage))
+{
+    Console.Error.WriteLine($"Input error: {errorMessage}");
+    return 1;
+}
+
+if (!ExperimentPipeline.TryAnalyzeBatch(
+        records,
         selectedPolicyType,
         selectedPolicy,
         out errorMessage,
-        out ExperimentReport? report))
+        out ExperimentBatchReport? report))
 {
     Console.Error.WriteLine($"Analysis error: {errorMessage}");
     return 1;
@@ -67,29 +72,30 @@ jsonOptions.Converters.Add(new JsonStringEnumConverter());
 
 Console.WriteLine(JsonSerializer.Serialize(report, jsonOptions));
 
-if (!ReportWriter.TryWriteReport(report, outputPath, out errorMessage))
+if (!ReportWriter.TryWriteBatchReport(report, outputPath, out errorMessage))
 {
     Console.Error.WriteLine($"Output error: {errorMessage}");
     return 1;
 }
+Console.WriteLine($"Accepted {report.Accepted.Count} of {report.TotalRecords} records, rejected {report.Rejected.Count}.");
 
 Console.WriteLine($"Report saved to {outputPath}");
 return 0;
 
-static string FindSampleInputPath()
+static string FindDefaultDatasetPath()
 {
     var directory = new DirectoryInfo(Environment.CurrentDirectory);
     while (directory is not null)
     {
         string[] candidates =
         {
-            Path.Combine(directory.FullName, "Data", "sample-experiment.json"),
-            Path.Combine(directory.FullName, "ThermodynamicsDataAnalyzer", "Data", "sample-experiment.json")
+            Path.Combine(directory.FullName, "Data", "experiments"),
+            Path.Combine(directory.FullName, "ThermodynamicsDataAnalyzer", "Data", "experiments")
         };
 
         foreach (string candidate in candidates)
         {
-            if (File.Exists(candidate))
+            if (Directory.Exists(candidate))
             {
                 return candidate;
             }
@@ -98,5 +104,5 @@ static string FindSampleInputPath()
         directory = directory.Parent;
     }
 
-    return Path.GetFullPath(Path.Combine("ThermodynamicsDataAnalyzer", "Data", "sample-experiment.json"));
+    return Path.GetFullPath(Path.Combine("ThermodynamicsDataAnalyzer", "Data", "experiments"));
 }

@@ -50,7 +50,7 @@ public class ExperimentPipeline
                 continue;
             }
 
-            if (policy(experiment, out double estimate))
+            if (!policy(experiment, out double estimate))
             {
                 rejected.Add(new RejectedExperiment(record.SourceFile, $"Policy type {policyType} could not calculate estimate"));
                 continue;
