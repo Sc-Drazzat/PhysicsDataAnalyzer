@@ -49,6 +49,22 @@ public class ExperimentValidatorTests
         Assert.False(ExperimentValidator.TryValidate(input, out _, out _));
     }
 
+    [Fact]
+    public void RejectsNullMeasurementEntry()
+    {
+        var input = TestData.ValidExperiment() with
+        {
+            Measurements = new TemperatureMeasurement?[]
+            {
+                new(0, 20),
+                null
+            }
+        };
+
+        Assert.False(ExperimentValidator.TryValidate(input, out _, out var error));
+        Assert.Contains("null", error, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Theory]
     [InlineData(10, 10)]
     [InlineData(10, 5)]

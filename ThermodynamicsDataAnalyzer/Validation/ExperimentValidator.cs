@@ -28,40 +28,60 @@ public class ExperimentValidator
             return false;
         }
 
-        if (input.MassKg <= 0)
+        if (input.MassKg <= 0 || !double.IsFinite(input.MassKg))
         {
             errorMessage = "Material mass must be more than zero";
             return false;
         }
 
-        if (input.HeaterPowerW <= 0)
+        if (input.HeaterPowerW <= 0 || !double.IsFinite(input.HeaterPowerW))
         {
             errorMessage = "Heater power must be more than zero";
             return false;
         }
 
-        if (input.SpecificHeatCapacityJPerKgK <= 0)
+        if (input.SpecificHeatCapacityJPerKgK <= 0 || !double.IsFinite(input.SpecificHeatCapacityJPerKgK))
         {
             errorMessage = "Heat capacity must be  more than zero";
             return false;
         }
 
-        if (input.Measurements == null || input.Measurements.Count < 2)
+        var measurements = input.Measurements;
+        if (measurements == null || measurements.Count < 2)
         {
             errorMessage = "Measurements count must be at least 2";
             return false;
         }
-        
-        for (int i = 1; i < input.Measurements.Count; i++)
+
+        var validatedMeasurements = new List<TemperatureMeasurement>(measurements.Count);
+        for (int i = 0; i < measurements.Count; i++)
         {
-            if (input.Measurements[i].TimeSeconds <= input.Measurements[i - 1].TimeSeconds)
+            TemperatureMeasurement? measurement = measurements[i];
+
+            if (measurement is null)
+            {
+                errorMessage = "Measurements cannot contain null entries";
+                return false;
+            }
+
+            if (!double.IsFinite(measurement.TimeSeconds)
+                || !double.IsFinite(measurement.TemperatureCelsius))
+            {
+                errorMessage = "Measurements must have finite times and temperatures";
+                return false;
+            }
+
+            if (i > 0
+                && measurement.TimeSeconds <= validatedMeasurements[i - 1].TimeSeconds)
             {
                 errorMessage = "Measurements time must increase";
                 return false;
             }
+
+            validatedMeasurements.Add(measurement);
         }
-        
-        experiment = new ValidatedExperiment(input);
+
+        experiment = new ValidatedExperiment(input, validatedMeasurements);
         return true;
     }
 }

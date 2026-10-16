@@ -6,5 +6,5 @@ public record ExperimentInput(
     double MassKg,
     double HeaterPowerW,
     double SpecificHeatCapacityJPerKgK,
-    IReadOnlyList<TemperatureMeasurement> Measurements
+    IReadOnlyList<TemperatureMeasurement?>? Measurements
     );

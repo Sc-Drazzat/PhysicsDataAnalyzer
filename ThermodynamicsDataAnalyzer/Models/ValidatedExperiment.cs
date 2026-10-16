@@ -9,13 +9,15 @@ public sealed record ValidatedExperiment
     public double SpecificHeatCapacityJPerKgK { get; }
     public IReadOnlyList<TemperatureMeasurement> Measurements { get; }
 
-    internal ValidatedExperiment(ExperimentInput input)
+    internal ValidatedExperiment(
+        ExperimentInput input,
+        IReadOnlyList<TemperatureMeasurement> measurements)
     {
         ExperimentId = input.ExperimentId;
         Material = input.Material;
         MassKg = input.MassKg;
         HeaterPowerW = input.HeaterPowerW;
         SpecificHeatCapacityJPerKgK = input.SpecificHeatCapacityJPerKgK;
-        Measurements = input.Measurements.ToList().AsReadOnly();
+        Measurements = measurements.ToList().AsReadOnly();
     }
 }

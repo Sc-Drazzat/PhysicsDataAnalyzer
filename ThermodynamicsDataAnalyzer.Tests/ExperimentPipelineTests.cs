@@ -92,7 +92,7 @@ public class ExperimentPipelineTests
             new TemperatureMeasurement(40, 24)
         };
         var input = TestData.ValidExperiment(measurements);
-        var before = input.Measurements.ToArray();
+        var before = measurements.ToArray();
 
         Assert.True(ExperimentPipeline.TryAnalyze(
             input,
@@ -101,6 +101,6 @@ public class ExperimentPipelineTests
             out _,
             out _));
 
-        Assert.Equal(before, input.Measurements);
+        Assert.Equal(before, measurements);
     }
 }
