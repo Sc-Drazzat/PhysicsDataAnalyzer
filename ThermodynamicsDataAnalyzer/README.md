@@ -2,7 +2,7 @@
 
 ## Purpose and research question
 
-This .NET console application analyzes temperature measurements from a constant-power heating experiment. It estimates a material's specific heat capacity from the measured heating data and compares that estimate with a supplied reference value.
+This .NET console application analyzes temperature measurements from constant-power heating experiments. It estimates a material's specific heat capacity, compares the estimate with a supplied reference value, and processes a folder of experiment JSON files in one run.
 
 **Research question:** How closely does the apparent specific heat capacity calculated from heater energy and measured temperature change agree with the reference specific heat capacity?
 
@@ -10,22 +10,22 @@ The estimate is *apparent*: the current model treats all energy supplied by the 
 
 ## Input format and units
 
-Input is a JSON object with these fields:
+Each input file is a JSON object with these fields:
 
 | Field | Type | Unit / meaning |
 |---|---|---|
 | `experimentId` | string | Experiment identifier; required, nonblank |
 | `material` | string | Material name; required, nonblank |
-| `massKg` | number | Sample mass in kilograms; must be greater than zero |
-| `heaterPowerW` | number | Constant heater power in watts; must be greater than zero |
-| `specificHeatCapacityJPerKgK` | number | Reference specific heat capacity in J/(kg·K); must be greater than zero |
-| `measurements` | array | At least two measurement objects |
-| `timeSeconds` | number | Measurement time in seconds, strictly increasing |
-| `temperatureCelsius` | number | Measured temperature in degrees Celsius |
+| `massKg` | number | Sample mass in kilograms; finite and greater than zero |
+| `heaterPowerW` | number | Constant heater power in watts; finite and greater than zero |
+| `specificHeatCapacityJPerKgK` | number | Reference specific heat capacity in J/(kg·K); finite and greater than zero |
+| `measurements` | array | At least two measurement objects; entries cannot be null |
+| `timeSeconds` | number | Measurement time in seconds; finite and strictly increasing |
+| `temperatureCelsius` | number | Measured temperature in degrees Celsius; finite |
 
-Example: [`Data/sample-experiment.json`](Data/sample-experiment.json).
+The dataset is [`Data/experiments`](Data/experiments). It contains five examples, including uneven heating, a two-measurement experiment, and an invalid zero-mass experiment. Property names are read case-insensitively.
 
-Property names are read case-insensitively. A missing file, unreadable file, malformed JSON, or JSON `null` is reported as an input error. A syntactically valid object missing required constructor data may fail during deserialization or validation.
+The reader processes all `*.json` files in the selected folder in filename order. A malformed or unreadable individual file is retained as a rejected record so that the other files can still be analyzed. A missing dataset folder is an input error. An existing empty folder is a valid dataset and produces an empty report.
 
 ## Physics, assumptions, and policies
 
@@ -39,33 +39,33 @@ The calculations use:
 - Mean-interval estimate: arithmetic mean of all `cᵢ`
 - Reported error: absolute difference `|c_est − c_reference|`; percentage `|c_est − c_reference| / c_reference × 100%`
 
-The model assumes constant heater power and does not correct for heat loss, heating of the container or sensor, or changes in heater power. The mean-interval policy requires each interval to have a positive temperature change; otherwise analysis fails. The pipeline currently calculates and reports both policies for every accepted experiment. Although a policy delegate type is declared in `Pipeline/AnalysisPolicy.cs`, the current pipeline does not accept a caller-selected policy.
+The model assumes constant heater power and does not correct for heat loss, heating of the container or sensor, or changes in heater power. The whole-experiment policy uses the first and last measurements. The mean-interval policy calculates an estimate for each consecutive pair and averages them; it fails for an experiment containing an interval with zero or negative temperature change. Both policies are selectable at runtime.
 
 ## Domain validation
 
-`ExperimentValidator.TryValidate` rejects null input, blank experiment ID or material, nonpositive mass, heater power, or reference heat capacity, fewer than two measurements, and timestamps that are duplicate or decreasing. The estimator rejects nonpositive mass or temperature change and nonfinite calculated estimates. Nonincreasing timestamps are rejected before calculation.
+`ExperimentValidator.TryValidate` rejects null input, blank experiment ID or material, nonfinite or nonpositive mass, heater power, or reference heat capacity, fewer than two measurements, null measurement entries, nonfinite measurement values, and timestamps that are duplicate or decreasing. On success, it creates a `ValidatedExperiment` snapshot containing a copied, read-only collection of non-null measurements. The original input collection is not modified.
 
-The validator does not currently check that numeric inputs and measurements are finite, nor that measurement temperatures increase overall. Consequently, some nonfinite values may pass initial validation and then fail or produce invalid calculations later. The mean-interval estimate specifically fails if any interval has zero or negative temperature change. Errors are returned through the `Try...` APIs and the console app exits with a nonzero status.
+Both estimator policies reject a nonpositive temperature change when it is needed for an estimate, and they reject nonfinite calculated estimates. As a result, whole-experiment analysis requires a positive net temperature change, while mean-interval analysis requires every interval to have a positive temperature change. Per-record validation or calculation failures are included in the batch report's `Rejected` list. Dataset-folder and report-writing errors are reported by the console application and return a nonzero exit status.
 
 ## Pipeline and output
 
 The workflow is:
 
-1. `Program.cs` chooses an input path and output path.
-2. `IO/ExperimentFileReader.cs` reads and deserializes JSON.
-3. `Validation/ExperimentValidator.cs` validates and creates a `ValidatedExperiment` snapshot.
-4. `Physics/ThermodynamicsCalculator.cs` calculates total elapsed time, temperature change, and supplied energy. `Physics/IntervalCalculator.cs` calculates each interval and its supplied energy.
-5. `Pipeline/AnalysisPolicy.cs` applies the whole-experiment and mean-interval estimators in `Physics/HeatCapacityEstimator.cs`.
-6. `Pipeline/ExperimentPipeline.cs` creates the report and computes absolute and percentage errors.
-7. The report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`.
+1. `Program.cs` reads optional command-line arguments and selects the whole-experiment or mean-interval policy.
+2. `IO/ExperimentFileReader.cs` finds and reads the JSON files in the dataset folder. File-level read errors are saved on their records so processing can continue.
+3. `Validation/ExperimentValidator.cs` validates each successfully read experiment and creates an isolated `ValidatedExperiment` snapshot.
+4. `Physics/ThermodynamicsCalculator.cs` calculates elapsed time, temperature change, and supplied energy. `Physics/IntervalCalculator.cs` creates interval values for the mean-interval policy.
+5. `Pipeline/AnalysisPolicy.cs` provides the two policy delegates, which call the relevant calculation and estimator stages in `Physics/HeatCapacityEstimator.cs`.
+6. `Pipeline/ExperimentPipeline.cs` invokes the selected delegate for each validated experiment and builds a batch report with accepted and rejected records.
+7. The report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`. Enum values are serialized as strings.
 
-With no arguments, the application locates the sample JSON and writes `report.json` beside it. Arguments are `INPUT_JSON [OUTPUT_JSON]`; if the second argument is omitted, the report is written beside the chosen input. Output directories are created when needed.
+The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the application locates `Data/experiments`, selects `whole`, and writes a policy-named report in `Data/reports`. The output directory is created when needed.
 
-For the included sample (0.2 kg water, 100 W, measurements from 20.0 °C at 0 s to 31.0 °C at 100 s): elapsed time is 100 s, temperature change is 11 K, and supplied energy is 10,000 J. Both policies estimate approximately 4545.45 J/(kg·K); the reference is 4180 J/(kg·K), with absolute error approximately 365.45 J/(kg·K) and percentage error approximately 8.74%. The checked-in sample report is [`Data/report.json`](Data/report.json). Small floating-point differences between policies are expected.
+For the included five-file dataset, the whole-experiment report contains four accepted experiments and one rejected experiment (`experiment-004.json`, whose mass is zero). For `experiment-001.json`, the whole-experiment estimate is approximately 4545.45 J/(kg·K), while the mean-interval estimate is approximately 5333.33 J/(kg·K). Its reference value is 4180 J/(kg·K). The checked-in whole-policy example is [`Data/reports/batch-report-whole.json`](Data/reports/batch-report-whole.json).
 
 ## Build and run
 
-The projects target `net10.0`. The SDK used for this submission check was **10.0.400**. From the repository root:
+The projects target `net10.0`. From the repository root:
 
 ```bash
 dotnet restore PhysicsDataAnalyzer.sln
@@ -73,19 +73,25 @@ dotnet build PhysicsDataAnalyzer.sln
 dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj
 ```
 
-Run with explicit paths (the output path is optional):
+Run the whole-experiment policy using the default report path:
 
 ```bash
-dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- ThermodynamicsDataAnalyzer/Data/sample-experiment.json /tmp/water-report.json
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- ThermodynamicsDataAnalyzer/Data/experiments
 ```
 
-To demonstrate a failure caused by a missing input file:
+Choose an explicit output path and the mean-interval policy:
 
 ```bash
-dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- /tmp/does-not-exist.json
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- ThermodynamicsDataAnalyzer/Data/experiments ThermodynamicsDataAnalyzer/Data/reports/my-mean-report.json mean
 ```
 
-This prints an `Input error` and exits with a nonzero status. To demonstrate a domain validation failure, make a copy of the sample JSON with `massKg` set to `0` and pass that file as the input; the pipeline reports an analysis error and does not create a report.
+To demonstrate an input error caused by a missing dataset folder:
+
+```bash
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- /tmp/does-not-exist
+```
+
+This prints an `Input error` and exits with a nonzero status. To demonstrate a rejected experiment while the batch continues, run against the included dataset: the zero-mass file appears in the report's `Rejected` list and the valid experiments are still analyzed.
 
 ## Automated tests and latest result
 
@@ -95,28 +101,28 @@ The test project is xUnit. Run it from the repository root:
 dotnet test PhysicsDataAnalyzer.sln
 ```
 
-Tests cover accepted and invalid experiments, missing text values, nonpositive mass, too few measurements, duplicate/decreasing timestamps, time and temperature differences, energy calculations, interval construction, both estimators, zero/negative interval temperature change, full report creation, pipeline error handling, and preservation of the input measurements.
+Tests cover valid and invalid experiments, null measurement entries, finite numeric values, measurement ordering, exactly two measurements, validated snapshots, time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
 
-**Latest observed result:** 19 total, 19 passed, 0 failed, 0 skipped. 
+**Latest observed result:** 35 total, 35 passed, 0 failed, 0 skipped.
 
 ## Requirement-to-file and method mapping
 
 | Requirement | Implemented location |
 |---|---|
-| Console entry point and default sample/output paths | `ThermodynamicsDataAnalyzer/Program.cs` — top-level program, `FindSampleInputPath` |
-| JSON input | `IO/ExperimentFileReader.cs` — `TryReadExperiment` |
-| Input data models | `Models/ExperimentInput.cs`, `Models/TemperatureMeasurement.cs` |
-| Domain validation and validated snapshot | `Validation/ExperimentValidator.cs` — `TryValidate`; `Models/ValidatedExperiment.cs` |
+| Console entry point, CLI policy selection, and default paths | `ThermodynamicsDataAnalyzer/Program.cs` — top-level program, `FindDefaultDatasetPath` |
+| JSON experiment and dataset reading | `IO/ExperimentFileReader.cs` — `TryReadExperiment`, `TryReadDataset` |
+| Input data models | `Models/ExperimentInput.cs`, `Models/TemperatureMeasurement.cs`, `Models/ExperimentFileRecord.cs` |
+| Domain validation and isolated validated snapshot | `Validation/ExperimentValidator.cs` — `TryValidate`; `Models/ValidatedExperiment.cs` |
 | Time, temperature, and energy calculations | `Physics/ThermodynamicsCalculator.cs` — `CalculateElapsedTimeSeconds`, `CalculateTemperatureChangeCelsius`, `CalculateEnergySupplied`, `CalculateIntervalEnergySupplied` |
 | Interval construction | `Physics/IntervalCalculator.cs` — `CalculateIntervals`; `Models/CalculatedInterval.cs` |
 | Specific heat estimators | `Physics/HeatCapacityEstimator.cs` — `TryEstimateWholeExperiment`, `TryEstimateMeanInterval` |
-| Policy wrappers | `Pipeline/AnalysisPolicy.cs` — `TryEstimateWholeExperimentPolicy`, `TryEstimateMeanIntervalPolicy` |
-| Workflow and error/percentage values | `Pipeline/ExperimentPipeline.cs` — `TryAnalyze`, `CreateResult` |
-| Report model and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport` |
-| Validation, physics, estimator, and pipeline tests | `ThermodynamicsDataTests/ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `ExperimentPipelineTests.cs`, `TestData.cs` |
+| Configurable policy delegates | `Pipeline/AnalysisPolicy.cs` — `TryEstimateWholeExperimentPolicy`, `TryEstimateMeanIntervalPolicy`; `Pipeline/ExperimentPipeline.cs` — `TryAnalyzeBatch` |
+| Batch workflow and error values | `Pipeline/ExperimentPipeline.cs` — `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
+| Report models and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport`, `TryWriteBatchReport` |
+| Validation, physics, estimator, reader, and pipeline tests | `ThermodynamicsDataAnalyzer.Tests/ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentFileReaderTests.cs`, `TestData.cs` |
 
 ## Author and contributions
 
 | Name | Group | Concrete contribution |
 |---|---|---|
-| Ayan Rakhimov | IT-2513 | The working tree contains the console workflow, JSON reader/writer, models, validation, physics calculations, both estimators, sample data/report, and xUnit coverage listed above. I documented the implemented behavior, file/method mapping, commands, and observed test outcome in this README. The available repository metadata does not establish who authored each source/test file, so individual implementation and test authorship should be confirmed by the project member before submission. |
+| Ayan Rakhimov | IT-2513 | Implemented the experiment models and validation, thermodynamics calculations, both specific-heat policies, JSON dataset reader and report writer, batch pipeline and CLI, example experiment data, and xUnit coverage. This README describes the implemented workflow, requirements mapping, and commands. |
