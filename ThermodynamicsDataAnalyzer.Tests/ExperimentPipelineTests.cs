@@ -11,7 +11,7 @@ public class ExperimentPipelineTests
     public void AnalyzesWholeExperimentPolicyAndBuildsReport()
     {
         bool success = ExperimentPipeline.TryAnalyze(
-            TestData.ValidExperiment(),
+            UnevenExperiment(),
             AnalysisPolicyType.WholeExperiment,
             AnalysisPolicies.TryEstimateWholeExperimentPolicy,
             out var error,
@@ -21,9 +21,9 @@ public class ExperimentPipelineTests
         Assert.Null(error);
         Assert.NotNull(report);
         Assert.Equal("test-001", report.ExperimentId);
-        Assert.Equal(4, report.TemperatureChangeCelsius);
-        Assert.Equal(40, report.ElapsedTimeSeconds);
-        Assert.Equal(5000, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 6);
+        Assert.Equal(11, report.TemperatureChangeCelsius);
+        Assert.Equal(100, report.ElapsedTimeSeconds);
+        Assert.Equal(4545.454545, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 4);
         Assert.Equal(AnalysisPolicyType.WholeExperiment, report.Result.Policy);
     }
 
@@ -31,7 +31,7 @@ public class ExperimentPipelineTests
     public void AnalyzesMeanIntervalPolicyAndBuildsReport()
     {
         bool success = ExperimentPipeline.TryAnalyze(
-            TestData.ValidExperiment(),
+            UnevenExperiment(),
             AnalysisPolicyType.MeanInterval,
             AnalysisPolicies.TryEstimateMeanIntervalPolicy,
             out var error,
@@ -40,7 +40,7 @@ public class ExperimentPipelineTests
         Assert.True(success);
         Assert.Null(error);
         Assert.NotNull(report);
-        Assert.Equal(5000, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 6);
+        Assert.Equal(5333.333333, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 5);
         Assert.Equal(AnalysisPolicyType.MeanInterval, report.Result.Policy);
     }
 
@@ -103,4 +103,14 @@ public class ExperimentPipelineTests
 
         Assert.Equal(before, measurements);
     }
+
+    private static ExperimentInput UnevenExperiment() => TestData.ValidExperiment(new[]
+    {
+        new TemperatureMeasurement(0, 20),
+        new TemperatureMeasurement(20, 21),
+        new TemperatureMeasurement(40, 24),
+        new TemperatureMeasurement(60, 27),
+        new TemperatureMeasurement(80, 29),
+        new TemperatureMeasurement(100, 31)
+    });
 }

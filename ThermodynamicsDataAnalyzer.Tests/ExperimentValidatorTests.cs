@@ -79,4 +79,108 @@ public class ExperimentValidatorTests
 
         Assert.False(ExperimentValidator.TryValidate(input, out _, out _));
     }
+    
+    [Fact]
+    public void RejectsMissingMeasurementList()
+    {
+        var input = TestData.ValidExperiment() with { Measurements = null };
+
+        Assert.False(ExperimentValidator.TryValidate(input, out var experiment, out var error));
+        Assert.Null(experiment);
+        Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void AcceptsExactlyTwoMeasurements()
+    {
+        var input = TestData.ValidExperiment(new[]
+        {
+            new TemperatureMeasurement(0, 20),
+            new TemperatureMeasurement(30, 25)
+        });
+
+        bool valid = ExperimentValidator.TryValidate(input, out var experiment, out var error);
+
+        Assert.True(valid);
+        Assert.Null(error);
+        Assert.NotNull(experiment);
+        Assert.Equal(2, experiment.Measurements.Count);
+    }
+
+    [Fact]
+    public void ValidatedExperimentKeepsAnIsolatedSnapshotOfMeasurements()
+    {
+        var sourceMeasurements = new List<TemperatureMeasurement?>
+        {
+            new(0, 20),
+            new(30, 25)
+        };
+        var input = TestData.ValidExperiment() with { Measurements = sourceMeasurements };
+
+        bool valid = ExperimentValidator.TryValidate(input, out var experiment, out var error);
+        Assert.True(valid);
+        Assert.Null(error);
+        Assert.NotNull(experiment);
+
+        sourceMeasurements[0] = new TemperatureMeasurement(0, 99);
+        sourceMeasurements.Add(new TemperatureMeasurement(60, 30));
+
+        Assert.Equal(2, experiment.Measurements.Count);
+        Assert.Equal(20, experiment.Measurements[0].TemperatureCelsius);
+    }
+
+    [Fact]
+    public void RejectsNonFiniteExperimentNumbers()
+    {
+        double[] invalidValues =
+        {
+            double.NaN,
+            double.PositiveInfinity,
+            double.NegativeInfinity
+        };
+
+        foreach (double value in invalidValues)
+        {
+            Assert.False(ExperimentValidator.TryValidate(
+                TestData.ValidExperiment() with { MassKg = value }, out _, out _));
+
+            Assert.False(ExperimentValidator.TryValidate(
+                TestData.ValidExperiment() with { HeaterPowerW = value }, out _, out _));
+
+            Assert.False(ExperimentValidator.TryValidate(
+                TestData.ValidExperiment() with
+                {
+                    SpecificHeatCapacityJPerKgK = value
+                }, out _, out _));
+        }
+    }
+
+    [Fact]
+    public void RejectsNonFiniteMeasurementValues()
+    {
+        double[] invalidValues =
+        {
+            double.NaN,
+            double.PositiveInfinity,
+            double.NegativeInfinity
+        };
+
+        foreach (double value in invalidValues)
+        {
+            var badTimeInput = TestData.ValidExperiment(new[]
+            {
+                new TemperatureMeasurement(value, 20),
+                new TemperatureMeasurement(30, 25)
+            });
+
+            var badTemperatureInput = TestData.ValidExperiment(new[]
+            {
+                new TemperatureMeasurement(0, value),
+                new TemperatureMeasurement(30, 25)
+            });
+
+            Assert.False(ExperimentValidator.TryValidate(badTimeInput, out _, out _));
+            Assert.False(ExperimentValidator.TryValidate(badTemperatureInput, out _, out _));
+        }
+    }
 }
