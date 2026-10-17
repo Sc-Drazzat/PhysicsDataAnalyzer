@@ -27,7 +27,7 @@ public static class SpecificHeatEstimator
         return TryCalculateSpecificHeatJperKg(energyJoules, massKg, temperatureChangeKelvin, out estimatedSpecificHeatCapacityJPerKg);
     }
 
-    public static bool TryEstimateMeanInterval(IReadOnlyList<CalculatedInterval> intervals, double massKg, out double estimatedSpecificHeatCapacityJPerKg)
+    public static bool TryEstimateMeanInterval(IReadOnlyList<CalculatedInterval>? intervals, double massKg, out double estimatedSpecificHeatCapacityJPerKg)
     {
         estimatedSpecificHeatCapacityJPerKg = 0;
 

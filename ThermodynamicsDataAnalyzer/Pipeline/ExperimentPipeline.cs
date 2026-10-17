@@ -40,14 +40,17 @@ public class ExperimentPipeline
                 continue;
             }
 
-            if (!ExperimentValidator.TryValidate(
-                    record.Input,
-                    out var experiment,
-                    out var message)
-                || experiment is null)
+            ValidatedExperiment experiment;
+            switch (ExperimentFactory.Create(record.Input))
             {
-                rejected.Add(new RejectedExperiment(record.SourceFile, message ?? "Experiment validation failed"));
-                continue;
+                case ValidationOutcome.Valid valid:
+                    experiment = valid.Value;
+                    break;
+                case ValidationOutcome.Invalid invalid:
+                    rejected.Add(new RejectedExperiment(record.SourceFile, string.Join(" ", invalid.Reasons)));
+                    continue;
+                default:
+                    throw new InvalidOperationException("Unknown validation outcome.");
             }
 
             if (!policy(experiment, out double estimate))
@@ -74,15 +77,17 @@ public class ExperimentPipeline
         errorMessage = null;
         report = null;
 
-        if (!ExperimentValidator.TryValidate(input, out var experiment, out errorMessage))
+        ValidatedExperiment experiment;
+        switch (ExperimentFactory.Create(input))
         {
-            return false;
-        }
-
-        if (experiment == null)
-        {
-            errorMessage = "Validation did not produced experiment";
-            return false;
+            case ValidationOutcome.Valid valid:
+                experiment = valid.Value;
+                break;
+            case ValidationOutcome.Invalid invalid:
+                errorMessage = string.Join(" ", invalid.Reasons);
+                return false;
+            default:
+                throw new InvalidOperationException("Unknown validation outcome.");
         }
 
         if (policy == null)
