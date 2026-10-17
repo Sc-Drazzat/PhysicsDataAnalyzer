@@ -2,15 +2,15 @@ using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Physics;
 using PhysicsDataAnalyzer.Validation;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
+using EstimatorPolicy = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 
 namespace PhysicsDataAnalyzer.Pipeline;
 
-public class ExperimentPipeline
+public static class ExperimentPipeline
 {
     public static bool TryAnalyzeBatch(
         IReadOnlyList<ExperimentFileRecord>? records,
-        AnalysisPolicyType policyType,
-        AnalysisPolicy.SpecificHeatPolicy? policy,
+        AnalysisPolicyType policy,
         out string? errorMessage,
         out ExperimentBatchReport? report)
     {
@@ -23,9 +23,9 @@ public class ExperimentPipeline
             return false;
         }
 
-        if (policy is null)
+        if (SelectEstimator(policy) is null)
         {
-            errorMessage = "Analysis policy is required";
+            errorMessage = "Unknown analysis policy";
             return false;
         }
 
@@ -40,42 +40,32 @@ public class ExperimentPipeline
                 continue;
             }
 
-            ValidatedExperiment experiment;
-            switch (ExperimentFactory.Create(record.Input))
+            var (acceptedEntry, rejectedEntry) = Analyze(record.Input, policy) switch
             {
-                case ValidationOutcome.Valid valid:
-                    experiment = valid.Value;
-                    break;
-                case ValidationOutcome.Invalid invalid:
-                    rejected.Add(new RejectedExperiment(record.SourceFile, string.Join(" ", invalid.Reasons)));
-                    continue;
-                default:
-                    throw new InvalidOperationException("Unknown validation outcome.");
-            }
+                AnalysisOutcome.Success success => (
+                    new AcceptedExperiment(record.SourceFile, success.Report),
+                    (RejectedExperiment?)null),
+                AnalysisOutcome.Failure failure => (
+                    (AcceptedExperiment?)null,
+                    new RejectedExperiment(record.SourceFile, string.Join(" ", failure.Reasons))),
+                _ => throw new InvalidOperationException("Unknown analysis outcome")
+            };
 
-            if (!policy(experiment, out double estimate))
-            {
-                rejected.Add(new RejectedExperiment(record.SourceFile, $"Policy type {policyType} could not calculate estimate"));
-                continue;
-            }
-            
-            accepted.Add(new AcceptedExperiment(record.SourceFile, CreateExperimentReport(experiment, policyType, estimate)));
+            if (acceptedEntry is not null)
+                accepted.Add(acceptedEntry);
+            if (rejectedEntry is not null)
+                rejected.Add(rejectedEntry);
         }
 
-        report = new ExperimentBatchReport(policyType, records.Count, accepted.AsReadOnly(), rejected.AsReadOnly());
-
+        report = new ExperimentBatchReport(policy, records.Count, accepted.AsReadOnly(), rejected.AsReadOnly());
         return true;
     }
 
-    public static bool TryAnalyze(
-        ExperimentInput? input,
-        AnalysisPolicyType policyType,
-        AnalysisPolicy.SpecificHeatPolicy? policy,
-        out string? errorMessage,
-        out ExperimentReport? report)
+    public static AnalysisOutcome Analyze(ExperimentInput? input, AnalysisPolicyType policy)
     {
-        errorMessage = null;
-        report = null;
+        var estimator = SelectEstimator(policy);
+        if (estimator is null)
+            return new AnalysisOutcome.Failure(new[] { "Unknown analysis policy" });
 
         ValidatedExperiment experiment;
         switch (ExperimentFactory.Create(input))
@@ -84,57 +74,34 @@ public class ExperimentPipeline
                 experiment = valid.Value;
                 break;
             case ValidationOutcome.Invalid invalid:
-                errorMessage = string.Join(" ", invalid.Reasons);
-                return false;
+                return new AnalysisOutcome.Failure(invalid.Reasons);
             default:
-                throw new InvalidOperationException("Unknown validation outcome.");
+                throw new InvalidOperationException("Unknown validation outcome");
         }
 
-        if (policy == null)
-        {
-            errorMessage = "Police cannot be null";
-            return false;
-        }
+        if (!estimator(experiment, out double estimate))
+            return new AnalysisOutcome.Failure(new[] { "The selected policy could not calculate estimate" });
 
-        if (!policy(experiment, out double estimate))
-        {
-            errorMessage = "Could not calculate policy";
-            return false;
-        }
-
-        double knownValue = experiment.SpecificHeatCapacityJPerKgK;
-
-        var measurements = experiment.Measurements;
-        double initialTemperature = measurements.First().TemperatureCelsius;
-        double finalTemperature = measurements.Last().TemperatureCelsius;
-        double temperatureChange = finalTemperature - initialTemperature;
-        double elapsedTime = measurements.Last().TimeSeconds - measurements.First().TimeSeconds;
-        double totalEnergy = ThermodynamicsCalculator.CalculateEnergySupplied(experiment.HeaterPowerW, elapsedTime);
-
-        var result = CreateResult(policyType, estimate, knownValue);
-        report = new ExperimentReport(
-            experiment.ExperimentId,
-            experiment.Material,
-            initialTemperature,
-            finalTemperature,
-            temperatureChange,
-            elapsedTime,
-            totalEnergy,
-            result);
-        return true;
+        return new AnalysisOutcome.Success(CreateExperimentReport(experiment, policy, estimate));
     }
 
     public static AnalysisResult CreateResult(AnalysisPolicyType policy, double estimate, double knownValue)
     {
         double absoluteError = Math.Abs(estimate - knownValue);
         double percentageError = absoluteError / knownValue * 100;
-
         return new AnalysisResult(policy, estimate, knownValue, absoluteError, percentageError);
     }
-    
+
+    private static EstimatorPolicy.SpecificHeatPolicy? SelectEstimator(AnalysisPolicyType policy) => policy switch
+    {
+        AnalysisPolicyType.WholeExperiment => EstimatorPolicy.TryEstimateWholeExperimentPolicy,
+        AnalysisPolicyType.MeanInterval => EstimatorPolicy.TryEstimateMeanIntervalPolicy,
+        _ => null
+    };
+
     private static ExperimentReport CreateExperimentReport(
         ValidatedExperiment experiment,
-        AnalysisPolicyType policyType,
+        AnalysisPolicyType policy,
         double estimate)
     {
         var measurements = experiment.Measurements;
@@ -142,15 +109,9 @@ public class ExperimentPipeline
         double finalTemperature = measurements[^1].TemperatureCelsius;
         double temperatureChange = finalTemperature - initialTemperature;
         double elapsedTime = measurements[^1].TimeSeconds - measurements[0].TimeSeconds;
-        double totalEnergy = ThermodynamicsCalculator.CalculateEnergySupplied(
-            experiment.HeaterPowerW,
-            elapsedTime);
+        double totalEnergy = ThermodynamicsCalculator.CalculateEnergySupplied(experiment.HeaterPowerW, elapsedTime);
 
-        AnalysisResult result = CreateResult(
-            policyType,
-            estimate,
-            experiment.SpecificHeatCapacityJPerKgK);
-
+        AnalysisResult result = CreateResult(policy, estimate, experiment.SpecificHeatCapacityJPerKgK);
         return new ExperimentReport(
             experiment.ExperimentId,
             experiment.Material,
