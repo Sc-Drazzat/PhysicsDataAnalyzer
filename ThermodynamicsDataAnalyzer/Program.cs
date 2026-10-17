@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using PhysicsDataAnalyzer.IO;
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
-using AnalysisPolicy = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 string datasetDirectory = args.Length > 0
@@ -22,18 +21,15 @@ string outputPath = args.Length > 1
         "reports",
         $"batch-report-{policyName}.json"));
 
-AnalysisPolicy.SpecificHeatPolicy selectedPolicy;
-AnalysisPolicyType selectedPolicyType;
+AnalysisPolicyType selectedPolicy;
 
 switch (policyName)
 {
     case "whole":
-        selectedPolicyType = AnalysisPolicyType.WholeExperiment;
-        selectedPolicy = AnalysisPolicy.TryEstimateWholeExperimentPolicy;
+        selectedPolicy = AnalysisPolicyType.WholeExperiment;
         break;
     case "mean":
-        selectedPolicyType = AnalysisPolicyType.MeanInterval;
-        selectedPolicy = AnalysisPolicy.TryEstimateMeanIntervalPolicy;
+        selectedPolicy = AnalysisPolicyType.MeanInterval;
         break;
     default:
         Console.WriteLine("Policy must be 'whole' or 'mean'");
@@ -52,7 +48,6 @@ if (!ExperimentFileReader.TryReadDataset(
 
 if (!ExperimentPipeline.TryAnalyzeBatch(
         records,
-        selectedPolicyType,
         selectedPolicy,
         out errorMessage,
         out ExperimentBatchReport? report))

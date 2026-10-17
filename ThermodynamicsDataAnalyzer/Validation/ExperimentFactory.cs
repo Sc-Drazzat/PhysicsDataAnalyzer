@@ -39,6 +39,7 @@ public static class ExperimentFactory
         }
 
         var measurements = input.Measurements;
+        var validatedMeasurements = new List<TemperatureMeasurement>(measurements?.Count ?? 0);
         if (measurements == null || measurements.Count < 2)
         {
             reasons.Add("Measurements count must be at least 2");
@@ -75,6 +76,8 @@ public static class ExperimentFactory
                 {
                     reasons.Add($"Measurement {i} time must increase");
                 }
+
+                validatedMeasurements.Add(measurement);
             }
         }
 
@@ -83,11 +86,7 @@ public static class ExperimentFactory
             return new ValidationOutcome.Invalid(Array.AsReadOnly(reasons.ToArray()));
         }
 
-        var snapshot = measurements!
-            .Select(measurement => measurement!)
-            .ToArray();
-
-        var validated = new ValidatedExperiment(input, snapshot);
+        var validated = new ValidatedExperiment(input, validatedMeasurements);
 
         return new ValidationOutcome.Valid(validated);
     }
