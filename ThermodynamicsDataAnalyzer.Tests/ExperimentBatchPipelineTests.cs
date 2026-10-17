@@ -1,6 +1,5 @@
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
-using AnalysisPolicies = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 namespace PhysicsDataAnalyzer.Tests;
@@ -19,7 +18,6 @@ public class ExperimentBatchPipelineTests
         bool success = ExperimentPipeline.TryAnalyzeBatch(
             records,
             AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
             out var error,
             out var report);
 
@@ -46,7 +44,6 @@ public class ExperimentBatchPipelineTests
         bool success = ExperimentPipeline.TryAnalyzeBatch(
             records,
             AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
             out var error,
             out var report);
 
@@ -66,7 +63,6 @@ public class ExperimentBatchPipelineTests
         bool success = ExperimentPipeline.TryAnalyzeBatch(
             Array.Empty<ExperimentFileRecord>(),
             AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
             out var error,
             out var report);
 
@@ -83,8 +79,7 @@ public class ExperimentBatchPipelineTests
     {
         bool success = ExperimentPipeline.TryAnalyzeBatch(
             Array.Empty<ExperimentFileRecord>(),
-            AnalysisPolicyType.WholeExperiment,
-            null,
+            (AnalysisPolicyType)999,
             out var error,
             out var report);
 
@@ -104,13 +99,11 @@ public class ExperimentBatchPipelineTests
         Assert.True(ExperimentPipeline.TryAnalyzeBatch(
             sameRecords,
             AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
             out _,
             out var wholeReport));
         Assert.True(ExperimentPipeline.TryAnalyzeBatch(
             sameRecords,
             AnalysisPolicyType.MeanInterval,
-            AnalysisPolicies.TryEstimateMeanIntervalPolicy,
             out _,
             out var meanReport));
 
@@ -138,7 +131,6 @@ public class ExperimentBatchPipelineTests
         Assert.True(ExperimentPipeline.TryAnalyzeBatch(
             new[] { record },
             AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
             out _,
             out var report));
 

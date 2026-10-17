@@ -43,20 +43,37 @@ The model assumes constant heater power and does not correct for heat loss, heat
 
 ## Domain validation
 
-`ExperimentValidator.TryValidate` rejects null input, blank experiment ID or material, nonfinite or nonpositive mass, heater power, or reference heat capacity, fewer than two measurements, null measurement entries, nonfinite measurement values, and timestamps that are duplicate or decreasing. On success, it creates a `ValidatedExperiment` snapshot containing a copied, read-only collection of non-null measurements. The original input collection is not modified.
+`ExperimentFactory.Create` rejects null input, blank experiment ID or material, nonfinite or nonpositive mass, heater power, or reference heat capacity, fewer than two measurements, null measurement entries, nonfinite measurement values, negative timestamps, and timestamps that are duplicate or decreasing. It returns a `ValidationOutcome.Valid` carrying a `ValidatedExperiment` only when every check passes; otherwise it returns `ValidationOutcome.Invalid` with the reasons. The validated value has an internal constructor and stores a copied, read-only measurement snapshot. The production pipeline pattern-matches both outcomes. `ExperimentValidator.TryValidate` remains as a compatibility adapter and delegates to the factory.
 
 Both estimator policies reject a nonpositive temperature change when it is needed for an estimate, and they reject nonfinite calculated estimates. As a result, whole-experiment analysis requires a positive net temperature change, while mean-interval analysis requires every interval to have a positive temperature change. Per-record validation or calculation failures are included in the batch report's `Rejected` list. Dataset-folder and report-writing errors are reported by the console application and return a nonzero exit status.
+
+After validation, `ExperimentPipeline.Analyze` returns `AnalysisOutcome.Success` with an `ExperimentReport` or `AnalysisOutcome.Failure` with reasons, including when the selected estimator cannot calculate a result. Batch processing uses a switch expression to turn each success into an accepted report and each failure into a rejected record. The pipeline accepts one policy enum and selects the matching estimator itself, so callers cannot pass a `WholeExperiment` label alongside the mean estimator.
+
+Analysis is repeatable and does not mutate its input: analyzing the same experiment with the same policy again returns the same report. Validation copies measurements into a read-only snapshot, and batch processing builds accepted and rejected entries in local lists before creating the final report. A rejected record does not change the input experiment or prevent the rest of the batch from being processed.
+
+## Unsafe before: hidden calculation prerequisites
+
+> Documentation-only example. This unsafe call site is not used by the active application.
+
+A specific-heat calculation depends on having valid measurement data and choosing which estimation policy to use. A less safe workflow could calculate directly from raw input before checking either prerequisite:
+
+```csharp
+ExperimentInput input = ReadRawExperiment();
+double estimate = CalculateSpecificHeat(input); // Was it validated? Which policy is being used?
+```
+
+The prerequisites are valid measurements, positive mass, heater power and reference heat capacity, and a selected calculation policy (`whole` or `mean`). The required order is to validate the raw experiment and select the policy first, then calculate using the resulting `ValidatedExperiment`. If validation or policy selection is skipped or happens after calculation, the program could divide by invalid values, produce an incorrect estimate, or create a report that cannot be trusted. The active workflow makes these steps explicit through `ExperimentFactory.Create`, policy selection in `Program.cs`, and the analysis pipeline.
 
 ## Pipeline and output
 
 The workflow is:
 
-1. `Program.cs` reads optional command-line arguments and selects the whole-experiment or mean-interval policy.
+1. `Program.cs` reads optional command-line arguments and selects the whole-experiment or mean-interval policy enum.
 2. `IO/ExperimentFileReader.cs` finds and reads the JSON files in the dataset folder. File-level read errors are saved on their records so processing can continue.
-3. `Validation/ExperimentValidator.cs` validates each successfully read experiment and creates an isolated `ValidatedExperiment` snapshot.
+3. `Validation/ExperimentFactory.cs` validates each successfully read experiment and returns an explicit valid or invalid outcome; valid outcomes carry an isolated `ValidatedExperiment` snapshot.
 4. `Physics/ThermodynamicsCalculator.cs` calculates elapsed time, temperature change, and supplied energy. `Physics/IntervalCalculator.cs` creates interval values for the mean-interval policy.
-5. `Pipeline/AnalysisPolicy.cs` provides the two policy delegates, which call the relevant calculation and estimator stages in `Physics/HeatCapacityEstimator.cs`.
-6. `Pipeline/ExperimentPipeline.cs` invokes the selected delegate for each validated experiment and builds a batch report with accepted and rejected records.
+5. `Pipeline/ExperimentPipeline.cs` selects the estimator for the chosen policy; `Pipeline/AnalysisPolicy.cs` calls the relevant calculation and estimator stages in `Physics/HeatCapacityEstimator.cs`.
+6. `Pipeline/ExperimentPipeline.cs` returns an explicit analysis outcome for each experiment and builds a batch report with accepted and rejected records using pattern matching.
 7. The report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`. Enum values are serialized as strings.
 
 The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the application locates `Data/experiments`, selects `whole`, and writes a policy-named report in `Data/reports`. The output directory is created when needed.
@@ -101,9 +118,9 @@ The test project is xUnit. Run it from the repository root:
 dotnet test PhysicsDataAnalyzer.sln
 ```
 
-Tests cover valid and invalid experiments, null measurement entries, finite numeric values, measurement ordering, exactly two measurements, validated snapshots, time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
+Tests cover valid and invalid experiments, null measurement entries, finite numeric values, measurement ordering, exactly two measurements, validated snapshots, time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
 
-**Latest observed result:** 35 total, 35 passed, 0 failed, 0 skipped.
+**Latest observed result (2026-10-17):** 36 total, 36 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
 
 ## Requirement-to-file and method mapping
 
@@ -112,12 +129,12 @@ Tests cover valid and invalid experiments, null measurement entries, finite nume
 | Console entry point, CLI policy selection, and default paths | `ThermodynamicsDataAnalyzer/Program.cs` — top-level program, `FindDefaultDatasetPath` |
 | JSON experiment and dataset reading | `IO/ExperimentFileReader.cs` — `TryReadExperiment`, `TryReadDataset` |
 | Input data models | `Models/ExperimentInput.cs`, `Models/TemperatureMeasurement.cs`, `Models/ExperimentFileRecord.cs` |
-| Domain validation and isolated validated snapshot | `Validation/ExperimentValidator.cs` — `TryValidate`; `Models/ValidatedExperiment.cs` |
+| Domain validation outcome and isolated validated snapshot | `Validation/ExperimentFactory.cs` — `Create`; `Models/ValidationOutcome.cs`; `Models/ValidatedExperiment.cs` |
 | Time, temperature, and energy calculations | `Physics/ThermodynamicsCalculator.cs` — `CalculateElapsedTimeSeconds`, `CalculateTemperatureChangeCelsius`, `CalculateEnergySupplied`, `CalculateIntervalEnergySupplied` |
 | Interval construction | `Physics/IntervalCalculator.cs` — `CalculateIntervals`; `Models/CalculatedInterval.cs` |
 | Specific heat estimators | `Physics/HeatCapacityEstimator.cs` — `TryEstimateWholeExperiment`, `TryEstimateMeanInterval` |
-| Configurable policy delegates | `Pipeline/AnalysisPolicy.cs` — `TryEstimateWholeExperimentPolicy`, `TryEstimateMeanIntervalPolicy`; `Pipeline/ExperimentPipeline.cs` — `TryAnalyzeBatch` |
-| Batch workflow and error values | `Pipeline/ExperimentPipeline.cs` — `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
+| Policy selection and matching estimator | `Pipeline/ExperimentPipeline.cs` — `SelectEstimator`; calculation functions in `Pipeline/AnalysisPolicy.cs` |
+| Explicit analysis success/failure and batch workflow | `Models/AnalysisOutcome.cs`; `Pipeline/ExperimentPipeline.cs` — `Analyze`, `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
 | Report models and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport`, `TryWriteBatchReport` |
 | Validation, physics, estimator, reader, and pipeline tests | `ThermodynamicsDataAnalyzer.Tests/ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentFileReaderTests.cs`, `TestData.cs` |
 

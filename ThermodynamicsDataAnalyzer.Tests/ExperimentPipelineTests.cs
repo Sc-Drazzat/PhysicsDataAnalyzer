@@ -1,6 +1,5 @@
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
-using AnalysisPolicies = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 namespace PhysicsDataAnalyzer.Tests;
@@ -10,16 +9,11 @@ public class ExperimentPipelineTests
     [Fact]
     public void AnalyzesWholeExperimentPolicyAndBuildsReport()
     {
-        bool success = ExperimentPipeline.TryAnalyze(
+        var success = Assert.IsType<AnalysisOutcome.Success>(ExperimentPipeline.Analyze(
             UnevenExperiment(),
-            AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
-            out var error,
-            out var report);
+            AnalysisPolicyType.WholeExperiment));
 
-        Assert.True(success);
-        Assert.Null(error);
-        Assert.NotNull(report);
+        var report = success.Report;
         Assert.Equal("test-001", report.ExperimentId);
         Assert.Equal(11, report.TemperatureChangeCelsius);
         Assert.Equal(100, report.ElapsedTimeSeconds);
@@ -30,16 +24,11 @@ public class ExperimentPipelineTests
     [Fact]
     public void AnalyzesMeanIntervalPolicyAndBuildsReport()
     {
-        bool success = ExperimentPipeline.TryAnalyze(
+        var success = Assert.IsType<AnalysisOutcome.Success>(ExperimentPipeline.Analyze(
             UnevenExperiment(),
-            AnalysisPolicyType.MeanInterval,
-            AnalysisPolicies.TryEstimateMeanIntervalPolicy,
-            out var error,
-            out var report);
+            AnalysisPolicyType.MeanInterval));
 
-        Assert.True(success);
-        Assert.Null(error);
-        Assert.NotNull(report);
+        var report = success.Report;
         Assert.Equal(5333.333333, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 5);
         Assert.Equal(AnalysisPolicyType.MeanInterval, report.Result.Policy);
     }
@@ -49,16 +38,11 @@ public class ExperimentPipelineTests
     {
         var invalidInput = TestData.ValidExperiment(massKg: 0);
 
-        bool success = ExperimentPipeline.TryAnalyze(
+        var failure = Assert.IsType<AnalysisOutcome.Failure>(ExperimentPipeline.Analyze(
             invalidInput,
-            AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
-            out var error,
-            out var report);
+            AnalysisPolicyType.WholeExperiment));
 
-        Assert.False(success);
-        Assert.NotNull(error);
-        Assert.Null(report);
+        Assert.Contains("mass", string.Join(" ", failure.Reasons), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -70,16 +54,11 @@ public class ExperimentPipelineTests
             new TemperatureMeasurement(20, 20)
         });
 
-        bool success = ExperimentPipeline.TryAnalyze(
+        var failure = Assert.IsType<AnalysisOutcome.Failure>(ExperimentPipeline.Analyze(
             input,
-            AnalysisPolicyType.MeanInterval,
-            AnalysisPolicies.TryEstimateMeanIntervalPolicy,
-            out var error,
-            out var report);
+            AnalysisPolicyType.MeanInterval));
 
-        Assert.False(success);
-        Assert.NotNull(error);
-        Assert.Null(report);
+        Assert.NotEmpty(failure.Reasons);
     }
 
     [Fact]
@@ -94,14 +73,24 @@ public class ExperimentPipelineTests
         var input = TestData.ValidExperiment(measurements);
         var before = measurements.ToArray();
 
-        Assert.True(ExperimentPipeline.TryAnalyze(
-            input,
-            AnalysisPolicyType.WholeExperiment,
-            AnalysisPolicies.TryEstimateWholeExperimentPolicy,
-            out _,
-            out _));
+        Assert.IsType<AnalysisOutcome.Success>(
+            ExperimentPipeline.Analyze(input, AnalysisPolicyType.WholeExperiment));
 
         Assert.Equal(before, measurements);
+    }
+
+    [Fact]
+    public void RepeatedAnalysisReturnsTheSameReportWithoutChangingTheInput()
+    {
+        var input = UnevenExperiment();
+
+        var first = Assert.IsType<AnalysisOutcome.Success>(
+            ExperimentPipeline.Analyze(input, AnalysisPolicyType.WholeExperiment));
+        var second = Assert.IsType<AnalysisOutcome.Success>(
+            ExperimentPipeline.Analyze(input, AnalysisPolicyType.WholeExperiment));
+
+        Assert.Equal(first.Report, second.Report);
+        Assert.Equal(6, input.Measurements!.Count);
     }
 
     private static ExperimentInput UnevenExperiment() => TestData.ValidExperiment(new[]
