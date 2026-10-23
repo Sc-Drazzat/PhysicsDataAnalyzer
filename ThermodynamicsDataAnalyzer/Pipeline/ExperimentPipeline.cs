@@ -8,6 +8,8 @@ namespace PhysicsDataAnalyzer.Pipeline;
 
 public static class ExperimentPipeline
 {
+    private sealed record AnalysisData(ValidatedExperiment Experiment, double Estimate);
+
     public static bool TryAnalyzeBatch(
         IReadOnlyList<ExperimentFileRecord>? records,
         AnalysisPolicyType policy,
@@ -23,9 +25,10 @@ public static class ExperimentPipeline
             return false;
         }
 
-        if (SelectEstimator(policy) is null)
+        var estimator = SelectEstimator(policy);
+        if (estimator is null)
         {
-            errorMessage = "Unknown analysis policy";
+            errorMessage = new DomainError(DomainError.Codes.AnalysisPolicyInvalid, "Unknown analysis policy").Message;
             return false;
         }
 
@@ -40,49 +43,52 @@ public static class ExperimentPipeline
                 continue;
             }
 
-            var (acceptedEntry, rejectedEntry) = Analyze(record.Input, policy) switch
+            var catalog = new ExperimentCatalog(new[] { record });
+            var experimentId = record.Input?.ExperimentId ?? string.Empty;
+            switch (Analyze(catalog, experimentId, policy, estimator))
             {
-                AnalysisOutcome.Success success => (
-                    new AcceptedExperiment(record.SourceFile, success.Report),
-                    (RejectedExperiment?)null),
-                AnalysisOutcome.Failure failure => (
-                    (AcceptedExperiment?)null,
-                    new RejectedExperiment(record.SourceFile, string.Join(" ", failure.Reasons))),
-                _ => throw new InvalidOperationException("Unknown analysis outcome")
-            };
-
-            if (acceptedEntry is not null)
-                accepted.Add(acceptedEntry);
-            if (rejectedEntry is not null)
-                rejected.Add(rejectedEntry);
+                case Result<ExperimentReport, DomainError>.Success success:
+                    accepted.Add(new AcceptedExperiment(record.SourceFile, success.Value));
+                    break;
+                case Result<ExperimentReport, DomainError>.Failure failure:
+                    rejected.Add(new RejectedExperiment(record.SourceFile, failure.Error.Message));
+                    break;
+                default:
+                    throw new InvalidOperationException("Unknown analysis result");
+            }
         }
 
         report = new ExperimentBatchReport(policy, records.Count, accepted.AsReadOnly(), rejected.AsReadOnly());
         return true;
     }
 
-    public static AnalysisOutcome Analyze(ExperimentInput? input, AnalysisPolicyType policy)
+    public static Result<ExperimentReport, DomainError> Analyze(
+        ExperimentCatalog catalog,
+        string experimentId,
+        AnalysisPolicyType policy)
     {
         var estimator = SelectEstimator(policy);
         if (estimator is null)
-            return new AnalysisOutcome.Failure(new[] { "Unknown analysis policy" });
+            return new Result<ExperimentReport, DomainError>.Failure(
+                new DomainError(DomainError.Codes.AnalysisPolicyInvalid, "Unknown analysis policy"));
 
-        ValidatedExperiment experiment;
-        switch (ExperimentFactory.Create(input))
-        {
-            case Result<ValidatedExperiment, DomainError>.Success valid:
-                experiment = valid.Value;
-                break;
-            case Result<ValidatedExperiment, DomainError>.Failure failure:
-                return new AnalysisOutcome.Failure(new[] { failure.Error.Message });
-            default:
-                throw new InvalidOperationException("Unknown validation result");
-        }
+        return Analyze(catalog, experimentId, policy, estimator);
+    }
 
-        if (!estimator(experiment, out double estimate))
-            return new AnalysisOutcome.Failure(new[] { "The selected policy could not calculate estimate" });
+    public static Result<ExperimentReport, DomainError> Analyze(
+        ExperimentCatalog catalog,
+        string experimentId,
+        AnalysisPolicyType policy,
+        EstimatorPolicy.SpecificHeatPolicy estimator)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(experimentId);
+        ArgumentNullException.ThrowIfNull(estimator);
 
-        return new AnalysisOutcome.Success(CreateExperimentReport(experiment, policy, estimate));
+        return Lookup(catalog, experimentId)
+            .Bind(ExperimentFactory.Create)
+            .Bind(experiment => Calculate(experiment, estimator))
+            .Map(data => CreateExperimentReport(data.Experiment, policy, data.Estimate));
     }
 
     public static AnalysisResult CreateResult(AnalysisPolicyType policy, double estimate, double knownValue)
@@ -90,6 +96,27 @@ public static class ExperimentPipeline
         double absoluteError = Math.Abs(estimate - knownValue);
         double percentageError = absoluteError / knownValue * 100;
         return new AnalysisResult(policy, estimate, knownValue, absoluteError, percentageError);
+    }
+
+    private static Result<ExperimentInput, DomainError> Lookup(ExperimentCatalog catalog, string experimentId) =>
+        catalog.FindById(experimentId) switch
+        {
+            Maybe<ExperimentFileRecord>.Some(var record) when record.Input is { } input =>
+                new Result<ExperimentInput, DomainError>.Success(input),
+            _ => new Result<ExperimentInput, DomainError>.Failure(
+                new DomainError(DomainError.Codes.ExperimentNotFound, $"Experiment '{experimentId}' was not found."))
+        };
+
+    private static Result<AnalysisData, DomainError> Calculate(
+        ValidatedExperiment experiment,
+        EstimatorPolicy.SpecificHeatPolicy estimator)
+    {
+        if (!estimator(experiment, out double estimate) || !double.IsFinite(estimate) || estimate <= 0)
+            return new Result<AnalysisData, DomainError>.Failure(
+                new DomainError(DomainError.Codes.CalculationRejected,
+                    $"The selected policy could not calculate a positive finite estimate for experiment '{experiment.ExperimentId}'."));
+
+        return new Result<AnalysisData, DomainError>.Success(new AnalysisData(experiment, estimate));
     }
 
     private static EstimatorPolicy.SpecificHeatPolicy? SelectEstimator(AnalysisPolicyType policy) => policy switch

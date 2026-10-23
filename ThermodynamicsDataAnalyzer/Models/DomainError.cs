@@ -14,6 +14,9 @@ public sealed record DomainError
         public const string MeasurementFinite = "experiment.measurement.finite";
         public const string MeasurementTimeNonNegative = "experiment.measurement.time.nonnegative";
         public const string MeasurementTimeIncreasing = "experiment.measurement.time.increasing";
+        public const string ExperimentNotFound = "experiment.lookup.not_found";
+        public const string AnalysisPolicyInvalid = "analysis.policy.invalid";
+        public const string CalculationRejected = "analysis.calculation.rejected";
     }
 
     public string Code { get; }

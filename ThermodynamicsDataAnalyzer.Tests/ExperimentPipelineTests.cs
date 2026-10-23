@@ -9,11 +9,9 @@ public class ExperimentPipelineTests
     [Fact]
     public void AnalyzesWholeExperimentPolicyAndBuildsReport()
     {
-        var success = Assert.IsType<AnalysisOutcome.Success>(ExperimentPipeline.Analyze(
-            UnevenExperiment(),
-            AnalysisPolicyType.WholeExperiment));
+        var result = ExperimentPipeline.Analyze(Catalog(UnevenExperiment()), "test-001", AnalysisPolicyType.WholeExperiment);
+        var report = Assert.IsType<Result<ExperimentReport, DomainError>.Success>(result).Value;
 
-        var report = success.Report;
         Assert.Equal("test-001", report.ExperimentId);
         Assert.Equal(11, report.TemperatureChangeCelsius);
         Assert.Equal(100, report.ElapsedTimeSeconds);
@@ -24,41 +22,74 @@ public class ExperimentPipelineTests
     [Fact]
     public void AnalyzesMeanIntervalPolicyAndBuildsReport()
     {
-        var success = Assert.IsType<AnalysisOutcome.Success>(ExperimentPipeline.Analyze(
-            UnevenExperiment(),
-            AnalysisPolicyType.MeanInterval));
+        var result = ExperimentPipeline.Analyze(Catalog(UnevenExperiment()), "test-001", AnalysisPolicyType.MeanInterval);
+        var report = Assert.IsType<Result<ExperimentReport, DomainError>.Success>(result).Value;
 
-        var report = success.Report;
         Assert.Equal(5333.333333, report.Result.EstimatedSpecificHeatCapacityJPerKgK, 5);
         Assert.Equal(AnalysisPolicyType.MeanInterval, report.Result.Policy);
     }
 
     [Fact]
-    public void ReturnsValidationErrorForInvalidInput()
+    public void ReturnsNotFoundFailureForMissingExperiment()
     {
-        var invalidInput = TestData.ValidExperiment(massKg: 0);
+        var result = ExperimentPipeline.Analyze(Catalog(UnevenExperiment()), "missing", AnalysisPolicyType.WholeExperiment);
 
-        var failure = Assert.IsType<AnalysisOutcome.Failure>(ExperimentPipeline.Analyze(
-            invalidInput,
-            AnalysisPolicyType.WholeExperiment));
-
-        Assert.Contains("mass", string.Join(" ", failure.Reasons), StringComparison.OrdinalIgnoreCase);
+        var error = Assert.IsType<Result<ExperimentReport, DomainError>.Failure>(result).Error;
+        Assert.Equal(DomainError.Codes.ExperimentNotFound, error.Code);
+        Assert.Contains("missing", error.Message);
     }
 
     [Fact]
-    public void ReturnsAnalysisErrorWhenTemperatureDoesNotIncrease()
+    public void ReturnsValidationFailureForInvalidInput()
     {
-        var input = TestData.ValidExperiment(new[]
-        {
-            new TemperatureMeasurement(0, 20),
-            new TemperatureMeasurement(20, 20)
-        });
+        var result = ExperimentPipeline.Analyze(Catalog(TestData.ValidExperiment(massKg: 0)), "test-001", AnalysisPolicyType.WholeExperiment);
 
-        var failure = Assert.IsType<AnalysisOutcome.Failure>(ExperimentPipeline.Analyze(
-            input,
-            AnalysisPolicyType.MeanInterval));
+        var error = Assert.IsType<Result<ExperimentReport, DomainError>.Failure>(result).Error;
+        Assert.Equal(DomainError.Codes.MassPositiveFinite, error.Code);
+    }
 
-        Assert.NotEmpty(failure.Reasons);
+    [Fact]
+    public void ReturnsDomainFailureWhenCalculationCannotProducePositiveEstimate()
+    {
+        var result = ExperimentPipeline.Analyze(
+            Catalog(UnevenExperiment()),
+            "test-001",
+            AnalysisPolicyType.WholeExperiment,
+            (ValidatedExperiment _, out double estimate) => { estimate = 0; return false; });
+
+        var error = Assert.IsType<Result<ExperimentReport, DomainError>.Failure>(result).Error;
+        Assert.Equal(DomainError.Codes.CalculationRejected, error.Code);
+        Assert.Contains("positive finite estimate", error.Message);
+    }
+
+    [Fact]
+    public void DoesNotCallCalculationWhenLookupFails()
+    {
+        var called = false;
+
+        var result = ExperimentPipeline.Analyze(
+            Catalog(UnevenExperiment()),
+            "missing",
+            AnalysisPolicyType.WholeExperiment,
+            (ValidatedExperiment _, out double estimate) => { called = true; estimate = 1; return true; });
+
+        Assert.IsType<Result<ExperimentReport, DomainError>.Failure>(result);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public void DoesNotCallCalculationWhenValidationFails()
+    {
+        var called = false;
+
+        var result = ExperimentPipeline.Analyze(
+            Catalog(TestData.ValidExperiment(massKg: 0)),
+            "test-001",
+            AnalysisPolicyType.WholeExperiment,
+            (ValidatedExperiment _, out double estimate) => { called = true; estimate = 1; return true; });
+
+        Assert.IsType<Result<ExperimentReport, DomainError>.Failure>(result);
+        Assert.False(called);
     }
 
     [Fact]
@@ -71,27 +102,30 @@ public class ExperimentPipelineTests
             new TemperatureMeasurement(40, 24)
         };
         var input = TestData.ValidExperiment(measurements);
-        var before = measurements.ToArray();
 
-        Assert.IsType<AnalysisOutcome.Success>(
-            ExperimentPipeline.Analyze(input, AnalysisPolicyType.WholeExperiment));
+        Assert.IsType<Result<ExperimentReport, DomainError>.Success>(
+            ExperimentPipeline.Analyze(Catalog(input), "test-001", AnalysisPolicyType.WholeExperiment));
 
-        Assert.Equal(before, measurements);
+        Assert.Equal(measurements, input.Measurements);
     }
 
     [Fact]
     public void RepeatedAnalysisReturnsTheSameReportWithoutChangingTheInput()
     {
         var input = UnevenExperiment();
+        var catalog = Catalog(input);
 
-        var first = Assert.IsType<AnalysisOutcome.Success>(
-            ExperimentPipeline.Analyze(input, AnalysisPolicyType.WholeExperiment));
-        var second = Assert.IsType<AnalysisOutcome.Success>(
-            ExperimentPipeline.Analyze(input, AnalysisPolicyType.WholeExperiment));
+        var first = Assert.IsType<Result<ExperimentReport, DomainError>.Success>(
+            ExperimentPipeline.Analyze(catalog, "test-001", AnalysisPolicyType.WholeExperiment)).Value;
+        var second = Assert.IsType<Result<ExperimentReport, DomainError>.Success>(
+            ExperimentPipeline.Analyze(catalog, "test-001", AnalysisPolicyType.WholeExperiment)).Value;
 
-        Assert.Equal(first.Report, second.Report);
+        Assert.Equal(first, second);
         Assert.Equal(6, input.Measurements!.Count);
     }
+
+    private static ExperimentCatalog Catalog(ExperimentInput? input) =>
+        new(new[] { new ExperimentFileRecord("test.json", input, null) });
 
     private static ExperimentInput UnevenExperiment() => TestData.ValidExperiment(new[]
     {
