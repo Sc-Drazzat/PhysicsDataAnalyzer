@@ -118,9 +118,9 @@ The test project is xUnit. Run it from the repository root:
 dotnet test PhysicsDataAnalyzer.sln
 ```
 
-Tests directly cover `ExperimentFactory.Create` success and rejection reasons for each validation rule, both `ValidationOutcome` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, `AnalysisOutcome` success and failure, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
+Tests directly cover `ExperimentFactory.Create` success and rejection reasons for each validation rule, both `ValidationOutcome` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. `ExperimentCatalogTests` cover found, missing, invalid-but-present, and zero-valued measurements. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, `AnalysisOutcome` success and failure, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
 
-**Latest observed result (2026-10-23):** 46 total, 46 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
+**Latest observed result (2026-10-23):** 50 total, 50 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
 
 ## Requirement-to-file and method mapping
 
@@ -134,6 +134,7 @@ Tests directly cover `ExperimentFactory.Create` success and rejection reasons fo
 | Interval construction | `Physics/IntervalCalculator.cs` — `CalculateIntervals`; `Models/CalculatedInterval.cs` |
 | Specific heat estimators | `Physics/HeatCapacityEstimator.cs` — `TryEstimateWholeExperiment`, `TryEstimateMeanInterval` |
 | Policy selection and matching estimator | `Pipeline/ExperimentPipeline.cs` — `SelectEstimator`; calculation functions in `Pipeline/AnalysisPolicy.cs` |
+| Explicit experiment lookup | `Models/Maybe.cs`; `Pipeline/ExperimentCatalog.cs` — `FindById` |
 | Explicit analysis success/failure and batch workflow | `Models/AnalysisOutcome.cs`; `Pipeline/ExperimentPipeline.cs` — `Analyze`, `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
 | Report models and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport`, `TryWriteBatchReport` |
 | Validation, physics, estimator, reader, and pipeline tests | `ThermodynamicsDataAnalyzer.Tests/ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentFileReaderTests.cs`, `TestData.cs` |
