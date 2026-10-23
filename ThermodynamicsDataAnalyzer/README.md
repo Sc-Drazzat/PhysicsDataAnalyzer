@@ -118,9 +118,9 @@ The test project is xUnit. Run it from the repository root:
 dotnet test PhysicsDataAnalyzer.sln
 ```
 
-Tests directly cover `ExperimentFactory.Create` success and rejection reasons for each validation rule, both `ValidationOutcome` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, `AnalysisOutcome` success and failure, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
+Tests directly cover `ExperimentFactory.Create` success and rejection reasons for each validation rule, both `ValidationOutcome` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, `AnalysisOutcome` success and failure, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
 
-**Latest observed result (2026-10-17):** 40 total, 40 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
+**Latest observed result (2026-10-23):** 46 total, 46 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
 
 ## Requirement-to-file and method mapping
 

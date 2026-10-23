@@ -3,6 +3,63 @@
   "TotalRecords": 5,
   "Accepted": [
     {
+      "SourceFile": "experiment-001.json",
+      "Report": {
+        "ExperimentId": "water-uneven-heating-001",
+        "Material": "water",
+        "InitialTemperatureCelsius": 20,
+        "FinalTemperatureCelsius": 31,
+        "TemperatureChangeCelsius": 11,
+        "ElapsedTimeSeconds": 100,
+        "TotalEnergySuppliedJoules": 10000,
+        "Result": {
+          "Policy": "WholeExperiment",
+          "EstimatedSpecificHeatCapacityJPerKgK": 4545.454545454545,
+          "SpecificHeatCapacityJPerKgK": 4180,
+          "AbsoluteErrorJPerKgK": 365.45454545454504,
+          "PercentageError": 8.742931709438876
+        }
+      }
+    },
+    {
+      "SourceFile": "experiment-002.json",
+      "Report": {
+        "ExperimentId": "water-steady-heating-002",
+        "Material": "water",
+        "InitialTemperatureCelsius": 19,
+        "FinalTemperatureCelsius": 27,
+        "TemperatureChangeCelsius": 8,
+        "ElapsedTimeSeconds": 80,
+        "TotalEnergySuppliedJoules": 8000,
+        "Result": {
+          "Policy": "WholeExperiment",
+          "EstimatedSpecificHeatCapacityJPerKgK": 4000,
+          "SpecificHeatCapacityJPerKgK": 4180,
+          "AbsoluteErrorJPerKgK": 180,
+          "PercentageError": 4.30622009569378
+        }
+      }
+    },
+    {
+      "SourceFile": "experiment-003.json",
+      "Report": {
+        "ExperimentId": "oil-minimum-measurements-003",
+        "Material": "oil",
+        "InitialTemperatureCelsius": 20,
+        "FinalTemperatureCelsius": 25,
+        "TemperatureChangeCelsius": 5,
+        "ElapsedTimeSeconds": 30,
+        "TotalEnergySuppliedJoules": 1500,
+        "Result": {
+          "Policy": "WholeExperiment",
+          "EstimatedSpecificHeatCapacityJPerKgK": 600,
+          "SpecificHeatCapacityJPerKgK": 2000,
+          "AbsoluteErrorJPerKgK": 1400,
+          "PercentageError": 70
+        }
+      }
+    },
+    {
       "SourceFile": "experiment-005.json",
       "Report": {
         "ExperimentId": "aluminum-uneven-heating-005",
@@ -23,18 +80,6 @@
     }
   ],
   "Rejected": [
-    {
-      "SourceFile": "experiment-001.json",
-      "Reason": "Heater power must be more than zero"
-    },
-    {
-      "SourceFile": "experiment-002.json",
-      "Reason": "Heat capacity must be  more than zero"
-    },
-    {
-      "SourceFile": "experiment-003.json",
-      "Reason": "Measurements time must increase"
-    },
     {
       "SourceFile": "experiment-004.json",
       "Reason": "Material mass must be more than zero"
