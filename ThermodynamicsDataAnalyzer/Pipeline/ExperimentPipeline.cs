@@ -70,13 +70,13 @@ public static class ExperimentPipeline
         ValidatedExperiment experiment;
         switch (ExperimentFactory.Create(input))
         {
-            case ValidationOutcome.Valid valid:
+            case Result<ValidatedExperiment, DomainError>.Success valid:
                 experiment = valid.Value;
                 break;
-            case ValidationOutcome.Invalid invalid:
-                return new AnalysisOutcome.Failure(invalid.Reasons);
+            case Result<ValidatedExperiment, DomainError>.Failure failure:
+                return new AnalysisOutcome.Failure(new[] { failure.Error.Message });
             default:
-                throw new InvalidOperationException("Unknown validation outcome");
+                throw new InvalidOperationException("Unknown validation result");
         }
 
         if (!estimator(experiment, out double estimate))
