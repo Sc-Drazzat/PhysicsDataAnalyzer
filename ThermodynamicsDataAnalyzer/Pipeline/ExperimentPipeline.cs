@@ -16,21 +16,33 @@ public static class ExperimentPipeline
         out string? errorMessage,
         out ExperimentBatchReport? report)
     {
-        errorMessage = null;
-        report = null;
-
-        if (records is null)
+        switch (AnalyzeBatch(records, policy))
         {
-            errorMessage = "Dataset cannot be null";
-            return false;
+            case Result<ExperimentBatchReport, DomainError>.Success success:
+                errorMessage = null;
+                report = success.Value;
+                return true;
+            case Result<ExperimentBatchReport, DomainError>.Failure failure:
+                errorMessage = failure.Error.Message;
+                report = null;
+                return false;
+            default:
+                throw new InvalidOperationException("Unknown batch analysis result");
         }
+    }
+
+    public static Result<ExperimentBatchReport, DomainError> AnalyzeBatch(
+        IReadOnlyList<ExperimentFileRecord>? records,
+        AnalysisPolicyType policy)
+    {
+        if (records is null)
+            return new Result<ExperimentBatchReport, DomainError>.Failure(
+                new DomainError(DomainError.Codes.AnalysisBatchDatasetRequired, "Dataset cannot be null."));
 
         var estimator = SelectEstimator(policy);
         if (estimator is null)
-        {
-            errorMessage = new DomainError(DomainError.Codes.AnalysisPolicyInvalid, "Unknown analysis policy").Message;
-            return false;
-        }
+            return new Result<ExperimentBatchReport, DomainError>.Failure(
+                new DomainError(DomainError.Codes.AnalysisPolicyInvalid, "Unknown analysis policy."));
 
         var accepted = new List<AcceptedExperiment>();
         var rejected = new List<RejectedExperiment>();
@@ -58,8 +70,8 @@ public static class ExperimentPipeline
             }
         }
 
-        report = new ExperimentBatchReport(policy, records.Count, accepted.AsReadOnly(), rejected.AsReadOnly());
-        return true;
+        return new Result<ExperimentBatchReport, DomainError>.Success(
+            new ExperimentBatchReport(policy, records.Count, accepted.AsReadOnly(), rejected.AsReadOnly()));
     }
 
     public static Result<ExperimentReport, DomainError> Analyze(

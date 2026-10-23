@@ -69,12 +69,12 @@ The prerequisites are valid measurements, positive mass, heater power and refere
 The workflow is:
 
 1. `Program.cs` reads optional command-line arguments and selects the whole-experiment or mean-interval policy enum.
-2. `IO/ExperimentFileReader.cs` finds and reads the JSON files in the dataset folder. File-level read errors are saved on their records so processing can continue.
-3. `Validation/ExperimentFactory.cs` validates each successfully read experiment and returns an explicit valid or invalid outcome; valid outcomes carry an isolated `ValidatedExperiment` snapshot.
+2. `IO/ExperimentFileReader.cs` reads JSON files into a local list and returns the dataset only when every file succeeds. A read or parse failure includes the operation and path and stops the console workflow before analysis.
+3. `Validation/ExperimentFactory.cs` validates each successfully read experiment and returns `Result<ValidatedExperiment, DomainError>`; success carries an isolated snapshot and failure carries a structured domain error.
 4. `Physics/ThermodynamicsCalculator.cs` calculates elapsed time, temperature change, and supplied energy. `Physics/IntervalCalculator.cs` creates interval values for the mean-interval policy.
 5. `Pipeline/ExperimentPipeline.cs` selects the estimator for the chosen policy; `Pipeline/AnalysisPolicy.cs` calls the relevant calculation and estimator stages in `Physics/HeatCapacityEstimator.cs`.
-6. `Pipeline/ExperimentPipeline.cs` returns a structured `Result` for each experiment and builds a batch report with accepted and rejected records using pattern matching.
-7. The report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`. Enum values are serialized as strings.
+6. `Pipeline/ExperimentPipeline.cs` returns a structured `Result` for each experiment and for batch-level failures. Per-experiment validation or calculation failures become rejected entries; `Program.cs` matches the batch result and prints each rejection reason.
+7. The successful batch report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`. Enum values are serialized as strings.
 
 The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the application locates `Data/experiments`, selects `whole`, and writes a policy-named report in `Data/reports`. The output directory is created when needed.
 
@@ -120,7 +120,7 @@ dotnet test PhysicsDataAnalyzer.sln
 
 Tests directly cover `ExperimentFactory.Create` success and structured rejection codes/messages for each validation rule, both `Result<ValidatedExperiment, DomainError>` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ExperimentValidatorTests` also verify the compatibility adapter maps a structured error to its message. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. `ExperimentCatalogTests` cover found, missing, invalid-but-present, and zero-valued measurements. Pipeline tests cover composed success, missing lookup, validation and calculation failures, and that calculation is skipped after a lookup or validation failure. File reader tests cover valid and empty datasets, missing paths, malformed JSON, path and operation details in errors, and no partial dataset on failure. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, repeated analysis, batch acceptance and rejection, report creation, and preservation of input measurements.
 
-**Latest observed result (2026-10-23):** 57 total, 57 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
+**Latest observed result (2026-10-23):** 59 total, 59 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
 
 ## Requirement-to-file and method mapping
 
@@ -135,7 +135,7 @@ Tests directly cover `ExperimentFactory.Create` success and structured rejection
 | Specific heat estimators | `Physics/HeatCapacityEstimator.cs` — `TryEstimateWholeExperiment`, `TryEstimateMeanInterval` |
 | Policy selection and matching estimator | `Pipeline/ExperimentPipeline.cs` — `SelectEstimator`; calculation functions in `Pipeline/AnalysisPolicy.cs` |
 | Explicit experiment lookup | `Models/Maybe.cs`; `Pipeline/ExperimentCatalog.cs` — `FindById` |
-| Composed Result analysis and batch workflow | `Models/Result.cs`; `Models/DomainError.cs`; `Pipeline/ExperimentPipeline.cs` — `Analyze`, `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
+| Composed Result analysis and batch workflow | `Models/Result.cs`; `Models/DomainError.cs`; `Pipeline/ExperimentPipeline.cs` — `Analyze`, `AnalyzeBatch`, `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
 | Report models and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport`, `TryWriteBatchReport` |
 | Validation, physics, estimator, reader, and pipeline tests | `ThermodynamicsDataAnalyzer.Tests/ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentFileReaderTests.cs`, `TestData.cs` |
 

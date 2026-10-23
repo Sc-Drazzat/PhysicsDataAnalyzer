@@ -26,6 +26,7 @@ public sealed record DomainError
         public const string DatasetNotFound = "io.dataset.not_found";
         public const string DatasetReadFailed = "io.dataset.read.failed";
         public const string DatasetAccessDenied = "io.dataset.access.denied";
+        public const string AnalysisBatchDatasetRequired = "analysis.batch.dataset.required";
     }
 
     public string Code { get; }

@@ -7,6 +7,32 @@ namespace PhysicsDataAnalyzer.Tests;
 public class ExperimentBatchPipelineTests
 {
     [Fact]
+    public void AnalyzeBatchReturnsSuccessWithAcceptedAndRejectedEntries()
+    {
+        var records = new[]
+        {
+            new ExperimentFileRecord("valid.json", TestData.ValidExperiment(), null),
+            new ExperimentFileRecord("invalid.json", TestData.ValidExperiment(massKg: 0), null)
+        };
+
+        var result = ExperimentPipeline.AnalyzeBatch(records, AnalysisPolicyType.WholeExperiment);
+
+        var report = Assert.IsType<Result<ExperimentBatchReport, DomainError>.Success>(result).Value;
+        Assert.Single(report.Accepted);
+        Assert.Single(report.Rejected);
+        Assert.Contains("mass", report.Rejected[0].Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AnalyzeBatchReturnsStructuredFailureForUnsupportedPolicy()
+    {
+        var result = ExperimentPipeline.AnalyzeBatch(Array.Empty<ExperimentFileRecord>(), (AnalysisPolicyType)999);
+
+        var error = Assert.IsType<Result<ExperimentBatchReport, DomainError>.Failure>(result).Error;
+        Assert.Equal(DomainError.Codes.AnalysisPolicyInvalid, error.Code);
+    }
+
+    [Fact]
     public void AnalyzesAllValidRecordsAndKeepsTheSelectedPolicyInReport()
     {
         var records = new[]

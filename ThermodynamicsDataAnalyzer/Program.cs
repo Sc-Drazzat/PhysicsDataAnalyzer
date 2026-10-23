@@ -38,35 +38,33 @@ switch (policyName)
 
 
 var datasetResult = ExperimentFileReader.TryReadDataset(datasetDirectory);
-if (datasetResult is Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure datasetFailure)
+IReadOnlyList<ExperimentFileRecord> records;
+switch (datasetResult)
 {
-    Console.Error.WriteLine($"Input error: {datasetFailure.Error.Message}");
-    return 1;
+    case Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Success success:
+        records = success.Value;
+        break;
+    case Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure failure:
+        Console.Error.WriteLine($"Input error: {failure.Error.Message}");
+        return 1;
+    default:
+        Console.Error.WriteLine("Input error: Unknown dataset result");
+        return 1;
 }
 
-if (datasetResult is not Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Success datasetSuccess)
+var batchResult = ExperimentPipeline.AnalyzeBatch(records, selectedPolicy);
+ExperimentBatchReport report;
+switch (batchResult)
 {
-    Console.Error.WriteLine("Input error: Unknown dataset read result");
-    return 1;
-}
-
-var records = datasetSuccess.Value;
-string? errorMessage;
-
-if (!ExperimentPipeline.TryAnalyzeBatch(
-        records,
-        selectedPolicy,
-        out errorMessage,
-        out ExperimentBatchReport? report))
-{
-    Console.Error.WriteLine($"Analysis error: {errorMessage}");
-    return 1;
-}
-
-if (report is null)
-{
-    Console.Error.WriteLine("Analysis completed without producing a report");
-    return 1;
+    case Result<ExperimentBatchReport, DomainError>.Success success:
+        report = success.Value;
+        break;
+    case Result<ExperimentBatchReport, DomainError>.Failure failure:
+        Console.Error.WriteLine($"Analysis error: {failure.Error.Message}");
+        return 1;
+    default:
+        Console.Error.WriteLine("Analysis error: Unknown batch result");
+        return 1;
 }
 
 var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
@@ -74,12 +72,14 @@ jsonOptions.Converters.Add(new JsonStringEnumConverter());
 
 Console.WriteLine(JsonSerializer.Serialize(report, jsonOptions));
 
-if (!ReportWriter.TryWriteBatchReport(report, outputPath, out errorMessage))
+if (!ReportWriter.TryWriteBatchReport(report, outputPath, out string? errorMessage))
 {
     Console.Error.WriteLine($"Output error: {errorMessage}");
     return 1;
 }
 Console.WriteLine($"Accepted {report.Accepted.Count} of {report.TotalRecords} records, rejected {report.Rejected.Count}.");
+foreach (RejectedExperiment rejected in report.Rejected)
+    Console.Error.WriteLine($"Rejected {rejected.SourceFile}: {rejected.Reason}");
 
 Console.WriteLine($"Report saved to {outputPath}");
 return 0;
