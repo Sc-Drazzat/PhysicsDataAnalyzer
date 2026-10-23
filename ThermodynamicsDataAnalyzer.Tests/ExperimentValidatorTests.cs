@@ -14,6 +14,7 @@ public class ExperimentValidatorTests
         Assert.True(valid);
         Assert.NotNull(experiment);
         Assert.Null(error);
+        Assert.Equal("test-001", experiment.ExperimentId);
     }
 
     [Fact]
@@ -39,6 +40,18 @@ public class ExperimentValidatorTests
         Assert.False(ExperimentValidator.TryValidate(
             TestData.ValidExperiment(massKg: 0), out _, out var error));
         Assert.Contains("mass", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryValidateAdapterReturnsTheStructuredErrorMessage()
+    {
+        var input = TestData.ValidExperiment(massKg: 0);
+        var result = ExperimentFactory.Create(input);
+
+        Assert.False(ExperimentValidator.TryValidate(input, out var experiment, out var error));
+        var failure = Assert.IsType<Result<ValidatedExperiment, DomainError>.Failure>(result);
+        Assert.Null(experiment);
+        Assert.Equal(failure.Error.Message, error);
     }
 
     [Fact]

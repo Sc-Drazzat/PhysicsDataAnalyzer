@@ -1,6 +1,21 @@
 namespace PhysicsDataAnalyzer.Models;
 public sealed record DomainError
 {
+    public static class Codes
+    {
+        public const string InputRequired = "experiment.input.required";
+        public const string ExperimentIdRequired = "experiment.id.required";
+        public const string MaterialRequired = "experiment.material.required";
+        public const string MassPositiveFinite = "experiment.mass.positive_finite";
+        public const string HeaterPowerPositiveFinite = "experiment.heater_power.positive_finite";
+        public const string ReferenceHeatCapacityPositiveFinite = "experiment.reference_heat_capacity.positive_finite";
+        public const string MeasurementsMinimum = "experiment.measurements.minimum";
+        public const string MeasurementRequired = "experiment.measurement.required";
+        public const string MeasurementFinite = "experiment.measurement.finite";
+        public const string MeasurementTimeNonNegative = "experiment.measurement.time.nonnegative";
+        public const string MeasurementTimeIncreasing = "experiment.measurement.time.increasing";
+    }
+
     public string Code { get; }
     public string Message { get; }
 

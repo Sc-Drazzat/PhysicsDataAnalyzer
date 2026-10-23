@@ -2,7 +2,6 @@ using PhysicsDataAnalyzer.Models;
 
 namespace PhysicsDataAnalyzer.Validation;
 
-/// <summary>Compatibility adapter for callers that still use the Try pattern.</summary>
 public static class ExperimentValidator
 {
     public static bool TryValidate(
@@ -12,18 +11,18 @@ public static class ExperimentValidator
     {
         switch (ExperimentFactory.Create(input))
         {
-            case ValidationOutcome.Valid valid:
+            case Result<ValidatedExperiment, DomainError>.Success valid:
                 experiment = valid.Value;
                 errorMessage = null;
                 return true;
 
-            case ValidationOutcome.Invalid invalid:
+            case Result<ValidatedExperiment, DomainError>.Failure failure:
                 experiment = null;
-                errorMessage = string.Join(" ", invalid.Reasons);
+                errorMessage = failure.Error.Message;
                 return false;
 
             default:
-                throw new InvalidOperationException("Unknown validation outcome");
+                throw new InvalidOperationException("Unknown validation result");
         }
     }
 }

@@ -43,7 +43,7 @@ The model assumes constant heater power and does not correct for heat loss, heat
 
 ## Domain validation
 
-`ExperimentFactory.Create` rejects null input, blank experiment ID or material, nonfinite or nonpositive mass, heater power, or reference heat capacity, fewer than two measurements, null measurement entries, nonfinite measurement values, negative timestamps, and timestamps that are duplicate or decreasing. It returns a `ValidationOutcome.Valid` carrying a `ValidatedExperiment` only when every check passes; otherwise it returns `ValidationOutcome.Invalid` with the reasons. The validated value has an internal constructor and stores a copied, read-only measurement snapshot. The production pipeline pattern-matches both outcomes. `ExperimentValidator.TryValidate` remains as a compatibility adapter and delegates to the factory.
+`ExperimentFactory.Create` returns `Result<ValidatedExperiment, DomainError>`. It rejects null input, blank experiment ID or material, nonfinite or nonpositive mass, heater power, or reference heat capacity, fewer than two measurements, null measurement entries, nonfinite measurement values, negative timestamps, and timestamps that are duplicate or decreasing. Each failure has a stable error code and a message that identifies the field, rule, experiment, or measurement index. The validated value has an internal constructor and stores a copied, read-only measurement snapshot. The production pipeline pattern-matches the `Success` and `Failure` cases. `ExperimentValidator.TryValidate` remains as a compatibility adapter and returns the structured error's message.
 
 Both estimator policies reject a nonpositive temperature change when it is needed for an estimate, and they reject nonfinite calculated estimates. As a result, whole-experiment analysis requires a positive net temperature change, while mean-interval analysis requires every interval to have a positive temperature change. Per-record validation or calculation failures are included in the batch report's `Rejected` list. Dataset-folder and report-writing errors are reported by the console application and return a nonzero exit status.
 
@@ -118,9 +118,9 @@ The test project is xUnit. Run it from the repository root:
 dotnet test PhysicsDataAnalyzer.sln
 ```
 
-Tests directly cover `ExperimentFactory.Create` success and rejection reasons for each validation rule, both `ValidationOutcome` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. `ExperimentCatalogTests` cover found, missing, invalid-but-present, and zero-valued measurements. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, `AnalysisOutcome` success and failure, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
+Tests directly cover `ExperimentFactory.Create` success and structured rejection codes/messages for each validation rule, both `Result<ValidatedExperiment, DomainError>` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ExperimentValidatorTests` also verify the compatibility adapter maps a structured error to its message. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. `ExperimentCatalogTests` cover found, missing, invalid-but-present, and zero-valued measurements. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, `AnalysisOutcome` success and failure, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
 
-**Latest observed result (2026-10-23):** 50 total, 50 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
+**Latest observed result (2026-10-23):** 51 total, 51 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
 
 ## Requirement-to-file and method mapping
 
@@ -129,7 +129,7 @@ Tests directly cover `ExperimentFactory.Create` success and rejection reasons fo
 | Console entry point, CLI policy selection, and default paths | `ThermodynamicsDataAnalyzer/Program.cs` — top-level program, `FindDefaultDatasetPath` |
 | JSON experiment and dataset reading | `IO/ExperimentFileReader.cs` — `TryReadExperiment`, `TryReadDataset` |
 | Input data models | `Models/ExperimentInput.cs`, `Models/TemperatureMeasurement.cs`, `Models/ExperimentFileRecord.cs` |
-| Domain validation outcome and isolated validated snapshot | `Validation/ExperimentFactory.cs` — `Create`; `Models/ValidationOutcome.cs`; `Models/ValidatedExperiment.cs` |
+| Structured domain validation and isolated validated snapshot | `Validation/ExperimentFactory.cs` — `Create`; `Models/Result.cs`; `Models/DomainError.cs`; `Models/ValidatedExperiment.cs` |
 | Time, temperature, and energy calculations | `Physics/ThermodynamicsCalculator.cs` — `CalculateElapsedTimeSeconds`, `CalculateTemperatureChangeCelsius`, `CalculateEnergySupplied`, `CalculateIntervalEnergySupplied` |
 | Interval construction | `Physics/IntervalCalculator.cs` — `CalculateIntervals`; `Models/CalculatedInterval.cs` |
 | Specific heat estimators | `Physics/HeatCapacityEstimator.cs` — `TryEstimateWholeExperiment`, `TryEstimateMeanInterval` |

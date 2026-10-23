@@ -17,74 +17,75 @@ public class ExperimentFactoryTests
 
         var result = ExperimentFactory.Create(input);
 
-        var valid = Assert.IsType<ValidationOutcome.Valid>(result);
-        Assert.Equal(input.ExperimentId, valid.Value.ExperimentId);
-        Assert.Equal(input.Material, valid.Value.Material);
-        Assert.Equal(input.MassKg, valid.Value.MassKg);
-        Assert.Equal(input.HeaterPowerW, valid.Value.HeaterPowerW);
-        Assert.Equal(input.SpecificHeatCapacityJPerKgK, valid.Value.SpecificHeatCapacityJPerKgK);
-        Assert.Equal(2, valid.Value.Measurements.Count);
-        Assert.Equal(20, valid.Value.Measurements[0].TemperatureCelsius);
+        var success = Assert.IsType<Result<ValidatedExperiment, DomainError>.Success>(result);
+        Assert.Equal(input.ExperimentId, success.Value.ExperimentId);
+        Assert.Equal(input.Material, success.Value.Material);
+        Assert.Equal(input.MassKg, success.Value.MassKg);
+        Assert.Equal(input.HeaterPowerW, success.Value.HeaterPowerW);
+        Assert.Equal(input.SpecificHeatCapacityJPerKgK, success.Value.SpecificHeatCapacityJPerKgK);
+        Assert.Equal(2, success.Value.Measurements.Count);
+        Assert.Equal(20, success.Value.Measurements[0].TemperatureCelsius);
 
         sourceMeasurements[0] = new TemperatureMeasurement(0, 99);
-        Assert.Equal(20, valid.Value.Measurements[0].TemperatureCelsius);
+        Assert.Equal(20, success.Value.Measurements[0].TemperatureCelsius);
     }
 
     [Fact]
     public void FactoryCasesAreBothReachableAndPatternMatched()
     {
-        var validResult = ExperimentFactory.Create(TestData.ValidExperiment());
-        var invalidResult = ExperimentFactory.Create(TestData.ValidExperiment(massKg: 0));
+        var successResult = ExperimentFactory.Create(TestData.ValidExperiment());
+        var failureResult = ExperimentFactory.Create(TestData.ValidExperiment(massKg: 0));
 
-        string validMatch = validResult switch
+        string successMatch = successResult switch
         {
-            ValidationOutcome.Valid valid => $"valid:{valid.Value.ExperimentId}",
-            ValidationOutcome.Invalid => "invalid",
-            _ => throw new InvalidOperationException("Unknown validation outcome")
+            Result<ValidatedExperiment, DomainError>.Success success => $"success:{success.Value.ExperimentId}",
+            Result<ValidatedExperiment, DomainError>.Failure => "failure",
+            _ => throw new InvalidOperationException("Unknown result case")
         };
-        string invalidMatch = invalidResult switch
+        string failureMatch = failureResult switch
         {
-            ValidationOutcome.Valid => "valid",
-            ValidationOutcome.Invalid invalid => $"invalid:{string.Join(" ", invalid.Reasons)}",
-            _ => throw new InvalidOperationException("Unknown validation outcome")
+            Result<ValidatedExperiment, DomainError>.Success => "success",
+            Result<ValidatedExperiment, DomainError>.Failure failure => $"failure:{failure.Error.Code}",
+            _ => throw new InvalidOperationException("Unknown result case")
         };
 
-        Assert.StartsWith("valid:", validMatch);
-        Assert.Contains("mass", invalidMatch, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("success:", successMatch);
+        Assert.Equal($"failure:{DomainError.Codes.MassPositiveFinite}", failureMatch);
     }
 
     [Fact]
-    public void RejectsEveryInvalidRuleWithAUsefulReason()
+    public void RejectsEveryValidationRuleWithAUsefulStructuredError()
     {
-        var cases = new (ExperimentInput? Input, string Reason)[]
+        var cases = new (ExperimentInput? Input, string Code, string MessagePart)[]
         {
-            (null, "experiment"),
-            (TestData.ValidExperiment() with { ExperimentId = " " }, "id"),
-            (TestData.ValidExperiment() with { Material = " " }, "material"),
-            (TestData.ValidExperiment(massKg: 0), "mass"),
-            (TestData.ValidExperiment(massKg: -1), "mass"),
-            (TestData.ValidExperiment() with { MassKg = double.NaN }, "mass"),
-            (TestData.ValidExperiment() with { MassKg = double.PositiveInfinity }, "mass"),
-            (TestData.ValidExperiment() with { HeaterPowerW = 0 }, "heater"),
-            (TestData.ValidExperiment() with { HeaterPowerW = double.NegativeInfinity }, "heater"),
-            (TestData.ValidExperiment() with { SpecificHeatCapacityJPerKgK = 0 }, "heat capacity"),
-            (TestData.ValidExperiment() with { SpecificHeatCapacityJPerKgK = double.NaN }, "heat capacity"),
-            (TestData.ValidExperiment() with { Measurements = null }, "measurement"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, 20) }), "at least 2"),
-            (TestData.ValidExperiment() with { Measurements = new TemperatureMeasurement?[] { new(0, 20), null } }, "null"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(double.NaN, 20), new TemperatureMeasurement(30, 25) }), "finite"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, double.PositiveInfinity), new TemperatureMeasurement(30, 25) }), "finite"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(-1, 20), new TemperatureMeasurement(30, 25) }), "negative"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, 20), new TemperatureMeasurement(0, 25) }), "increase"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, 20), new TemperatureMeasurement(-1, 25) }), "negative"),
-            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(10, 20), new TemperatureMeasurement(5, 25) }), "increase")
+            (null, DomainError.Codes.InputRequired, "input"),
+            (TestData.ValidExperiment() with { ExperimentId = " " }, DomainError.Codes.ExperimentIdRequired, "ID"),
+            (TestData.ValidExperiment() with { Material = " " }, DomainError.Codes.MaterialRequired, "material"),
+            (TestData.ValidExperiment(massKg: 0), DomainError.Codes.MassPositiveFinite, "mass"),
+            (TestData.ValidExperiment(massKg: -1), DomainError.Codes.MassPositiveFinite, "mass"),
+            (TestData.ValidExperiment() with { MassKg = double.NaN }, DomainError.Codes.MassPositiveFinite, "mass"),
+            (TestData.ValidExperiment() with { MassKg = double.PositiveInfinity }, DomainError.Codes.MassPositiveFinite, "mass"),
+            (TestData.ValidExperiment() with { HeaterPowerW = 0 }, DomainError.Codes.HeaterPowerPositiveFinite, "heater power"),
+            (TestData.ValidExperiment() with { HeaterPowerW = double.NegativeInfinity }, DomainError.Codes.HeaterPowerPositiveFinite, "heater power"),
+            (TestData.ValidExperiment() with { SpecificHeatCapacityJPerKgK = 0 }, DomainError.Codes.ReferenceHeatCapacityPositiveFinite, "reference heat capacity"),
+            (TestData.ValidExperiment() with { SpecificHeatCapacityJPerKgK = double.NaN }, DomainError.Codes.ReferenceHeatCapacityPositiveFinite, "reference heat capacity"),
+            (TestData.ValidExperiment() with { Measurements = null }, DomainError.Codes.MeasurementsMinimum, "measurements"),
+            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, 20) }), DomainError.Codes.MeasurementsMinimum, "at least two"),
+            (TestData.ValidExperiment() with { Measurements = new TemperatureMeasurement?[] { new(0, 20), null } }, DomainError.Codes.MeasurementRequired, "measurement 1"),
+            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(double.NaN, 20), new TemperatureMeasurement(30, 25) }), DomainError.Codes.MeasurementFinite, "measurement 0"),
+            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, double.PositiveInfinity), new TemperatureMeasurement(30, 25) }), DomainError.Codes.MeasurementFinite, "measurement 0"),
+            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(-1, 20), new TemperatureMeasurement(30, 25) }), DomainError.Codes.MeasurementTimeNonNegative, "measurement 0"),
+            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(0, 20), new TemperatureMeasurement(0, 25) }), DomainError.Codes.MeasurementTimeIncreasing, "measurement 1"),
+            (TestData.ValidExperiment(new[] { new TemperatureMeasurement(10, 20), new TemperatureMeasurement(5, 25) }), DomainError.Codes.MeasurementTimeIncreasing, "measurement 1")
         };
 
-        foreach (var (input, expectedReason) in cases)
+        foreach (var (input, expectedCode, messagePart) in cases)
         {
-            var outcome = ExperimentFactory.Create(input);
-            var invalid = Assert.IsType<ValidationOutcome.Invalid>(outcome);
-            Assert.Contains(expectedReason, string.Join(" ", invalid.Reasons), StringComparison.OrdinalIgnoreCase);
+            var result = ExperimentFactory.Create(input);
+            var failure = Assert.IsType<Result<ValidatedExperiment, DomainError>.Failure>(result);
+
+            Assert.Equal(expectedCode, failure.Error.Code);
+            Assert.Contains(messagePart, failure.Error.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -99,7 +100,7 @@ public class ExperimentFactoryTests
         var input = TestData.ValidExperiment() with { Measurements = measurements, MassKg = 0 };
         var before = measurements.ToArray();
 
-        Assert.IsType<ValidationOutcome.Invalid>(ExperimentFactory.Create(input));
+        Assert.IsType<Result<ValidatedExperiment, DomainError>.Failure>(ExperimentFactory.Create(input));
 
         Assert.Equal(0, input.MassKg);
         Assert.Equal(before, measurements);
