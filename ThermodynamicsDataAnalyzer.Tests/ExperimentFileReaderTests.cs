@@ -11,51 +11,97 @@ public class ExperimentFileReaderTests
     {
         WithTempDirectory(directory =>
         {
-            bool success = ExperimentFileReader.TryReadDataset(directory, out var records, out var error);
+            var result = ExperimentFileReader.TryReadDataset(directory);
 
-            Assert.True(success);
-            Assert.Null(error);
+            var records = Assert.IsType<Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Success>(result).Value;
             Assert.Empty(records);
         });
     }
 
     [Fact]
-    public void RejectsMissingOrBlankDatasetDirectory()
-    {
-        bool blankSuccess = ExperimentFileReader.TryReadDataset(" ", out var blankRecords, out var blankError);
-        bool missingSuccess = ExperimentFileReader.TryReadDataset(
-            Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-            out var missingRecords,
-            out var missingError);
-
-        Assert.False(blankSuccess);
-        Assert.Empty(blankRecords);
-        Assert.NotNull(blankError);
-        Assert.False(missingSuccess);
-        Assert.Empty(missingRecords);
-        Assert.Contains("not found", missingError, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void KeepsMalformedFileAsARecordAndContinuesReadingValidFiles()
+    public void ReportsMissingFileWithOperationAndPath()
     {
         WithTempDirectory(directory =>
         {
-            File.WriteAllText(Path.Combine(directory, "a-broken.json"), "{ this is not valid json");
+            string path = Path.Combine(directory, "missing.json");
+
+            var result = ExperimentFileReader.TryReadExperiment(path);
+
+            var error = Assert.IsType<Result<ExperimentInput, DomainError>.Failure>(result).Error;
+            Assert.Equal(DomainError.Codes.FileNotFound, error.Code);
+            Assert.Contains("Read experiment file", error.Message);
+            Assert.Contains(path, error.Message);
+        });
+    }
+
+    [Fact]
+    public void ReportsMalformedJsonWithOperationAndPath()
+    {
+        WithTempDirectory(directory =>
+        {
+            string path = Path.Combine(directory, "broken.json");
+            File.WriteAllText(path, "{ this is not valid json");
+
+            var result = ExperimentFileReader.TryReadExperiment(path);
+
+            var error = Assert.IsType<Result<ExperimentInput, DomainError>.Failure>(result).Error;
+            Assert.Equal(DomainError.Codes.FileJsonInvalid, error.Code);
+            Assert.Contains("Parse experiment file", error.Message);
+            Assert.Contains(path, error.Message);
+        });
+    }
+
+    [Fact]
+    public void ReportsMissingOrBlankDatasetDirectory()
+    {
+        var blankResult = ExperimentFileReader.TryReadDataset(" ");
+        var missingPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        var missingResult = ExperimentFileReader.TryReadDataset(missingPath);
+
+        var blankError = Assert.IsType<Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure>(blankResult).Error;
+        var missingError = Assert.IsType<Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure>(missingResult).Error;
+        Assert.Equal(DomainError.Codes.DatasetPathRequired, blankError.Code);
+        Assert.Contains("Read dataset", blankError.Message);
+        Assert.Equal(DomainError.Codes.DatasetNotFound, missingError.Code);
+        Assert.Contains(missingPath, missingError.Message);
+    }
+
+    [Fact]
+    public void MalformedFileFailsDatasetReadWithoutReturningPartialRecords()
+    {
+        WithTempDirectory(directory =>
+        {
+            string validPath = Path.Combine(directory, "a-valid.json");
+            string invalidPath = Path.Combine(directory, "b-broken.json");
+            File.WriteAllText(validPath, JsonSerializer.Serialize(TestData.ValidExperiment()));
+            File.WriteAllText(invalidPath, "{ this is not valid json");
+
+            var result = ExperimentFileReader.TryReadDataset(directory);
+
+            var error = Assert.IsType<Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure>(result).Error;
+            Assert.Equal(DomainError.Codes.FileJsonInvalid, error.Code);
+            Assert.Contains("Parse experiment file", error.Message);
+            Assert.Contains(invalidPath, error.Message);
+        });
+    }
+
+    [Fact]
+    public void ReadsEveryValidFileInSortedOrder()
+    {
+        WithTempDirectory(directory =>
+        {
             File.WriteAllText(
-                Path.Combine(directory, "b-valid.json"),
-                JsonSerializer.Serialize(TestData.ValidExperiment()));
+                Path.Combine(directory, "b-second.json"),
+                JsonSerializer.Serialize(TestData.ValidExperiment() with { ExperimentId = "second" }));
+            File.WriteAllText(
+                Path.Combine(directory, "a-first.json"),
+                JsonSerializer.Serialize(TestData.ValidExperiment() with { ExperimentId = "first" }));
 
-            bool success = ExperimentFileReader.TryReadDataset(directory, out var records, out var error);
+            var result = ExperimentFileReader.TryReadDataset(directory);
 
-            Assert.True(success);
-            Assert.Null(error);
-            Assert.Equal(2, records.Count);
-            Assert.Equal(new[] { "a-broken.json", "b-valid.json" }, records.Select(r => r.SourceFile));
-            Assert.Null(records[0].Input);
-            Assert.Contains("invalid JSON", records[0].ReadError, StringComparison.OrdinalIgnoreCase);
-            Assert.NotNull(records[1].Input);
-            Assert.Null(records[1].ReadError);
+            var records = Assert.IsType<Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Success>(result).Value;
+            Assert.Equal(new[] { "a-first.json", "b-second.json" }, records.Select(record => record.SourceFile));
+            Assert.Equal(new[] { "first", "second" }, records.Select(record => record.Input!.ExperimentId));
         });
     }
 

@@ -25,7 +25,7 @@ Each input file is a JSON object with these fields:
 
 The dataset is [`Data/experiments`](Data/experiments). It contains five examples, including uneven heating, a two-measurement experiment, and an invalid zero-mass experiment. Property names are read case-insensitively.
 
-The reader processes all `*.json` files in the selected folder in filename order. A malformed or unreadable individual file is retained as a rejected record so that the other files can still be analyzed. A missing dataset folder is an input error. An existing empty folder is a valid dataset and produces an empty report.
+The reader processes all `*.json` files in the selected folder in filename order. File or parsing errors return a structured `DomainError` with the operation and path. A dataset read builds records locally and returns them only when every file succeeds, so a malformed or unreadable file does not expose a partial dataset. A missing dataset folder is an input error. An existing empty folder is a valid dataset and produces an empty report.
 
 ## Physics, assumptions, and policies
 
@@ -73,7 +73,7 @@ The workflow is:
 3. `Validation/ExperimentFactory.cs` validates each successfully read experiment and returns an explicit valid or invalid outcome; valid outcomes carry an isolated `ValidatedExperiment` snapshot.
 4. `Physics/ThermodynamicsCalculator.cs` calculates elapsed time, temperature change, and supplied energy. `Physics/IntervalCalculator.cs` creates interval values for the mean-interval policy.
 5. `Pipeline/ExperimentPipeline.cs` selects the estimator for the chosen policy; `Pipeline/AnalysisPolicy.cs` calls the relevant calculation and estimator stages in `Physics/HeatCapacityEstimator.cs`.
-6. `Pipeline/ExperimentPipeline.cs` returns an explicit analysis outcome for each experiment and builds a batch report with accepted and rejected records using pattern matching.
+6. `Pipeline/ExperimentPipeline.cs` returns a structured `Result` for each experiment and builds a batch report with accepted and rejected records using pattern matching.
 7. The report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`. Enum values are serialized as strings.
 
 The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the application locates `Data/experiments`, selects `whole`, and writes a policy-named report in `Data/reports`. The output directory is created when needed.
@@ -118,16 +118,16 @@ The test project is xUnit. Run it from the repository root:
 dotnet test PhysicsDataAnalyzer.sln
 ```
 
-Tests directly cover `ExperimentFactory.Create` success and structured rejection codes/messages for each validation rule, both `Result<ValidatedExperiment, DomainError>` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ExperimentValidatorTests` also verify the compatibility adapter maps a structured error to its message. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. `ExperimentCatalogTests` cover found, missing, invalid-but-present, and zero-valued measurements. Pipeline tests cover composed success, missing lookup, validation and calculation failures, and that calculation is skipped after a lookup or validation failure. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, repeated analysis, batch acceptance and rejection, empty datasets, dataset-folder errors, malformed JSON alongside valid files, report creation, and preservation of input measurements.
+Tests directly cover `ExperimentFactory.Create` success and structured rejection codes/messages for each validation rule, both `Result<ValidatedExperiment, DomainError>` cases, exact two-measurement boundaries, snapshot isolation, and preservation of input after failed construction. `ExperimentValidatorTests` also verify the compatibility adapter maps a structured error to its message. `ResultTests` cover success/failure payloads, successful `Map` and `Bind`, failure propagation, and that callbacks are skipped for failures. `ExperimentCatalogTests` cover found, missing, invalid-but-present, and zero-valued measurements. Pipeline tests cover composed success, missing lookup, validation and calculation failures, and that calculation is skipped after a lookup or validation failure. File reader tests cover valid and empty datasets, missing paths, malformed JSON, path and operation details in errors, and no partial dataset on failure. Other tests cover time and temperature differences, energy and interval calculations, both estimators, policy differences on the same uneven data, repeated analysis, batch acceptance and rejection, report creation, and preservation of input measurements.
 
-**Latest observed result (2026-10-23):** 54 total, 54 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
+**Latest observed result (2026-10-23):** 57 total, 57 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false`.
 
 ## Requirement-to-file and method mapping
 
 | Requirement | Implemented location |
 |---|---|
 | Console entry point, CLI policy selection, and default paths | `ThermodynamicsDataAnalyzer/Program.cs` — top-level program, `FindDefaultDatasetPath` |
-| JSON experiment and dataset reading | `IO/ExperimentFileReader.cs` — `TryReadExperiment`, `TryReadDataset` |
+| JSON experiment and dataset reading with structured errors | `IO/ExperimentFileReader.cs` — `TryReadExperiment`, `TryReadDataset`; `Models/Result.cs`; `Models/DomainError.cs` |
 | Input data models | `Models/ExperimentInput.cs`, `Models/TemperatureMeasurement.cs`, `Models/ExperimentFileRecord.cs` |
 | Structured domain validation and isolated validated snapshot | `Validation/ExperimentFactory.cs` — `Create`; `Models/Result.cs`; `Models/DomainError.cs`; `Models/ValidatedExperiment.cs` |
 | Time, temperature, and energy calculations | `Physics/ThermodynamicsCalculator.cs` — `CalculateElapsedTimeSeconds`, `CalculateTemperatureChangeCelsius`, `CalculateEnergySupplied`, `CalculateIntervalEnergySupplied` |

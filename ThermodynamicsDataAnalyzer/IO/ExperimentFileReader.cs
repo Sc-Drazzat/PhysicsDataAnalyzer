@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Text.Json;
 using PhysicsDataAnalyzer.Models;
 
@@ -11,106 +10,88 @@ public static class ExperimentFileReader
         PropertyNameCaseInsensitive = true
     };
 
-    public static bool TryReadExperiment(string? path, out ExperimentInput? experiment, out string? errorMessage)
+    public static Result<ExperimentInput, DomainError> TryReadExperiment(string? path)
     {
-        experiment = null;
-        errorMessage = null;
-
         if (string.IsNullOrWhiteSpace(path))
-        {
-            errorMessage = "Input file path cannot be empty";
-            return false;
-        }
+            return Failure(DomainError.Codes.FilePathRequired, "Read experiment file", "File path cannot be empty.");
 
         if (!File.Exists(path))
-        {
-            errorMessage = $"Input file was not found: {path}";
-            return false;
-        }
+            return Failure(DomainError.Codes.FileNotFound, "Read experiment file", $"File was not found: '{path}'.");
 
         try
         {
             string json = File.ReadAllText(path);
+            var experiment = JsonSerializer.Deserialize<ExperimentInput>(json, JsonOptions);
 
-            experiment = JsonSerializer.Deserialize<ExperimentInput>(
-                json,
-                JsonOptions);
-
-            if (experiment == null)
-            {
-                errorMessage = "The JSON file did not contain experiment";
-                return false;
-            }
-
-            return true;
+            return experiment is null
+                ? Failure(DomainError.Codes.FileJsonInvalid, "Parse experiment file", $"JSON contained no experiment: '{path}'.")
+                : new Result<ExperimentInput, DomainError>.Success(experiment);
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
-            errorMessage = "The input file contains invalid JSON";
-            return false;
+            return Failure(DomainError.Codes.FileJsonInvalid, "Parse experiment file", $"Malformed JSON in '{path}': {exception.Message}");
         }
-        catch (IOException)
+        catch (UnauthorizedAccessException exception)
         {
-            errorMessage = $"Could not read the input file: {path}";
-            return false;
+            return Failure(DomainError.Codes.FileAccessDenied, "Read experiment file", $"Access denied for '{path}': {exception.Message}");
         }
-        catch (UnauthorizedAccessException)
+        catch (IOException exception)
         {
-            errorMessage = $"Access denied while reading input file: {path}";
-            return false;
+            return Failure(DomainError.Codes.FileReadFailed, "Read experiment file", $"Could not read '{path}': {exception.Message}");
         }
     }
 
-    public static bool TryReadDataset(string? directoryPath, out IReadOnlyList<ExperimentFileRecord> records,
-        out string? errorMessage)
+    public static Result<IReadOnlyList<ExperimentFileRecord>, DomainError> TryReadDataset(string? directoryPath)
     {
-        records = Array.Empty<ExperimentFileRecord>();
-        errorMessage = null;
-
         if (string.IsNullOrWhiteSpace(directoryPath))
-        {
-            errorMessage = "Dataset directory path cannot be empty";
-            return false;
-        }
+            return Failure<IReadOnlyList<ExperimentFileRecord>>(
+                DomainError.Codes.DatasetPathRequired, "Read dataset", "Directory path cannot be empty.");
 
         if (!Directory.Exists(directoryPath))
-        {
-            errorMessage = $"Dataset directory was not found: {directoryPath}";
-            return false;
-        }
+            return Failure<IReadOnlyList<ExperimentFileRecord>>(
+                DomainError.Codes.DatasetNotFound, "Read dataset", $"Directory was not found: '{directoryPath}'.");
 
         try
         {
-            string[] paths = Directory
-                .GetFiles(directoryPath, "*.json")
+            string[] paths = Directory.GetFiles(directoryPath, "*.json")
                 .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            var results = new List<ExperimentFileRecord>();
-
+            var records = new List<ExperimentFileRecord>(paths.Length);
             foreach (string path in paths)
             {
-                bool success = TryReadExperiment(path, out ExperimentInput? input, out string? readError);
-
-                results.Add(new ExperimentFileRecord(
-                    Path.GetFileName(path) ?? path,
-                    success ? input : null,
-                    success ? null : readError ?? "Could not read experiment file"));
+                switch (TryReadExperiment(path))
+                {
+                    case Result<ExperimentInput, DomainError>.Success success:
+                        records.Add(new ExperimentFileRecord(Path.GetFileName(path), success.Value, null));
+                        break;
+                    case Result<ExperimentInput, DomainError>.Failure failure:
+                        return new Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure(failure.Error);
+                    default:
+                        throw new InvalidOperationException("Unknown file read result");
+                }
             }
 
-            records = results.AsReadOnly();
-            return true;
+            return new Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Success(records.AsReadOnly());
         }
-        catch (IOException)
+        catch (UnauthorizedAccessException exception)
         {
-            errorMessage = $"Could not read dataset directory: {directoryPath}";
-            return false;
+            return Failure<IReadOnlyList<ExperimentFileRecord>>(
+                DomainError.Codes.DatasetAccessDenied, "Read dataset", $"Access denied for directory '{directoryPath}': {exception.Message}");
         }
-
-        catch (UnauthorizedAccessException)
+        catch (IOException exception)
         {
-            errorMessage = $"Access denied while reading directory: {directoryPath}";
-            return false;
+            return Failure<IReadOnlyList<ExperimentFileRecord>>(
+                DomainError.Codes.DatasetReadFailed, "Read dataset", $"Could not read directory '{directoryPath}': {exception.Message}");
         }
     }
+
+    private static Result<ExperimentInput, DomainError>.Failure Failure(
+        string code,
+        string operation,
+        string detail) =>
+        new(new DomainError(code, $"{operation} failed. {detail}"));
+
+    private static Result<T, DomainError>.Failure Failure<T>(string code, string operation, string detail) =>
+        new(new DomainError(code, $"{operation} failed. {detail}"));
 }

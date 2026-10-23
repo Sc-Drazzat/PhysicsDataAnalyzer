@@ -17,6 +17,15 @@ public sealed record DomainError
         public const string ExperimentNotFound = "experiment.lookup.not_found";
         public const string AnalysisPolicyInvalid = "analysis.policy.invalid";
         public const string CalculationRejected = "analysis.calculation.rejected";
+        public const string FilePathRequired = "io.file.path.required";
+        public const string FileNotFound = "io.file.not_found";
+        public const string FileJsonInvalid = "io.file.json.invalid";
+        public const string FileReadFailed = "io.file.read.failed";
+        public const string FileAccessDenied = "io.file.access.denied";
+        public const string DatasetPathRequired = "io.dataset.path.required";
+        public const string DatasetNotFound = "io.dataset.not_found";
+        public const string DatasetReadFailed = "io.dataset.read.failed";
+        public const string DatasetAccessDenied = "io.dataset.access.denied";
     }
 
     public string Code { get; }

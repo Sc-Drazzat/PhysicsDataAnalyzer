@@ -37,14 +37,21 @@ switch (policyName)
 }
 
 
-if (!ExperimentFileReader.TryReadDataset(
-        datasetDirectory,
-        out var records,
-        out string? errorMessage))
+var datasetResult = ExperimentFileReader.TryReadDataset(datasetDirectory);
+if (datasetResult is Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Failure datasetFailure)
 {
-    Console.Error.WriteLine($"Input error: {errorMessage}");
+    Console.Error.WriteLine($"Input error: {datasetFailure.Error.Message}");
     return 1;
 }
+
+if (datasetResult is not Result<IReadOnlyList<ExperimentFileRecord>, DomainError>.Success datasetSuccess)
+{
+    Console.Error.WriteLine("Input error: Unknown dataset read result");
+    return 1;
+}
+
+var records = datasetSuccess.Value;
+string? errorMessage;
 
 if (!ExperimentPipeline.TryAnalyzeBatch(
         records,
