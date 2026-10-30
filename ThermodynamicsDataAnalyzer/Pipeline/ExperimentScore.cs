@@ -5,7 +5,6 @@ namespace PhysicsDataAnalyzer.Pipeline;
 public sealed record ScoreConfiguration(double PenaltyPerErrorPercent)
 {
     public static ScoreConfiguration Lenient { get; } = new(0.5);
-
     public static ScoreConfiguration Strict { get; } = new(2.0);
 }
 
