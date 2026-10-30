@@ -113,6 +113,18 @@ The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. I
 
 For the included five-file dataset, the whole-experiment report contains four accepted experiments and one rejected experiment (`experiment-004.json`, whose mass is zero). For `experiment-001.json`, the whole-experiment estimate is approximately 4545.45 J/(kg·K), while the mean-interval estimate is approximately 5333.33 J/(kg·K). Its reference value is 4180 J/(kg·K). The checked-in whole-policy example is [`Data/reports/batch-report-whole.json`](Data/reports/batch-report-whole.json).
 
+## Native energy conversion
+
+The native library exports `pda_joules_to_watt_hours(double)`. It returns `-1.0` for negative input and `joules / 3600.0` otherwise. The shared library path is chosen by the C# native-library loader, not by the C source file.
+
+The checked build target is macOS arm64. It uses Apple clang 21.0.0 (`clang-2100.0.123.102`) and builds with this command from the native energy directory:
+
+```bash
+clang -arch arm64 -dynamiclib -std=c11 -O2 -Wall -Wextra -Werror -o build/macos-arm64/libpda_energy.dylib energy_conversion.c
+```
+
+Run `sh ThermodynamicsDataAnalyzer/native/energy/build.sh` from the repository root to produce `ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib`.
+
 ## Build and run
 
 The projects target `net10.0`. From the repository root:

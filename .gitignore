@@ -1,5 +1,6 @@
 bin/
 obj/
+/ThermodynamicsDataAnalyzer/native/energy/build/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
