@@ -189,6 +189,12 @@ The suite contains 59 cumulative xUnit tests, well above the 10-test minimum. Te
 | Report models and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport`, `TryWriteBatchReport` |
 | Result, factory, lookup, reader, pipeline, and physics tests | `ThermodynamicsDataAnalyzer.Tests/ResultTests.cs`, `ExperimentFactoryTests.cs`, `ExperimentCatalogTests.cs`, `ExperimentFileReaderTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `TestData.cs` |
 
+## Report sequences and snapshots
+
+`WhereReportable` and `ToAccuracyRows` are extension methods on `IEnumerable<ExperimentReport>` because filtering and projection are reusable sequence operations. This lets callers compose them with different report sources and other LINQ operations without requiring a particular collection type.
+
+`ExperimentStream.EnumerateEnergyConversions` is deferred: conversion occurs during enumeration. Enumerating its original sequence again repeats conversion. When multiple passes need consistent converted values, materialize once with `ToArray()` and reuse that array; reusing the array does not repeat conversion.
+
 ## Submission archive
 
 The submission archive contains the solution, application and test source, README, and sample input and report JSON. Generated `bin` and `obj` folders, IDE caches, and user-specific IDE settings are excluded. Restore packages and rebuild after extracting the archive.
