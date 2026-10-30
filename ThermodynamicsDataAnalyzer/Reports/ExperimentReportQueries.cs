@@ -1,4 +1,5 @@
 using PhysicsDataAnalyzer.Models;
+using PhysicsDataAnalyzer.Extensions;
 
 namespace PhysicsDataAnalyzer.Reports;
 
@@ -9,15 +10,8 @@ public static class ExperimentReportQueries
         ArgumentNullException.ThrowIfNull(reports);
 
         return reports
-            .Where(IsReportable)
-            .Select(report => new ExperimentAccuracyRow(
-                report.ExperimentId,
-                report.Material,
-                report.Result.Policy,
-                report.Result.EstimatedSpecificHeatCapacityJPerKgK,
-                report.Result.SpecificHeatCapacityJPerKgK,
-                report.Result.AbsoluteErrorJPerKgK,
-                report.Result.PercentageError))
+            .WhereReportable()
+            .ToAccuracyRows()
             .OrderByDescending(row => row.PercentageError)
             .ThenBy(row => row.ExperimentId, StringComparer.Ordinal)
             .ToArray();
@@ -28,7 +22,9 @@ public static class ExperimentReportQueries
         ArgumentNullException.ThrowIfNull(reports);
 
         return reports
-            .Where(IsReportable)
+            .WhereReportable()
+            .Where(report => double.IsFinite(report.Result.PercentageError) &&
+                             double.IsFinite(report.TotalEnergySuppliedJoules))
             .GroupBy(report => report.Material, StringComparer.Ordinal)
             .Select(group => new MaterialSummaryRow(
                 group.Key,
@@ -41,11 +37,4 @@ public static class ExperimentReportQueries
             .ToArray();
     }
 
-    private static bool IsReportable(ExperimentReport report) =>
-        double.IsFinite(report.Result.EstimatedSpecificHeatCapacityJPerKgK) &&
-        double.IsFinite(report.Result.SpecificHeatCapacityJPerKgK) &&
-        report.Result.SpecificHeatCapacityJPerKgK > 0 &&
-        double.IsFinite(report.Result.AbsoluteErrorJPerKgK) &&
-        double.IsFinite(report.Result.PercentageError) &&
-        double.IsFinite(report.TotalEnergySuppliedJoules);
 }
