@@ -10,14 +10,14 @@ public class ExperimentReportQueriesTests
     {
         var reports = new[]
         {
-            Report("b", "Water", 120, 100, 20, 20, 2),
+            Report("b", "Water", 130, 100, 30, 20, 30),
             Report("a", "Iron", 80, 100, 20, 20, 1)
         };
 
         var rows = ExperimentReportQueries.BuildAccuracyRanking(reports);
 
         Assert.Equal(new[] { "b", "a" }, rows.Select(row => row.ExperimentId));
-        Assert.Equal(new ExperimentAccuracyRow("b", "Water", AnalysisPolicy.MeanInterval, 120, 100, 20, 20), rows[0]);
+        Assert.Equal(new ExperimentAccuracyRow("b", "Water", AnalysisPolicy.MeanInterval, 130, 100, 30, 30), rows[0]);
     }
 
     [Fact]

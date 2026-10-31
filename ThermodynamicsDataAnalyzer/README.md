@@ -92,38 +92,51 @@ A specific-heat calculation depends on having valid measurement data and choosin
 
 ```csharp
 ExperimentInput input = ReadRawExperiment();
-double estimate = CalculateSpecificHeat(input); // Was it validated? Which policy is being used?
+double estimate = CalculateSpecificHeat(input);
 ```
 
 The prerequisites are valid measurements, positive mass, heater power and reference heat capacity, and a selected calculation policy (`whole` or `mean`). The required order is to validate the raw experiment and select the policy first, then calculate using the resulting `ValidatedExperiment`. If validation or policy selection is skipped or happens after calculation, the program could divide by invalid values, produce an incorrect estimate, or create a report that cannot be trusted. The active workflow makes these steps explicit through `ExperimentFactory.Create`, policy selection in `Program.cs`, and the analysis pipeline.
 
 ## Pipeline and output
 
-The workflow is:
+The workflow reads command-line arguments, selects `whole` or `mean`, then calls `ExperimentFileReader.TryReadDataset`. `ExperimentPipeline.AnalyzeAssignment8` calls the existing `AnalyzeBatch`, preserving batch `Result` failures and accepted/rejected per-record outcomes. It takes only accepted `ExperimentReport` values and passes them to `ExperimentStream.EnumerateEnergyConversions` with `NativeEnergyAdapter`.
 
-1. `Program.cs` reads optional command-line arguments and selects the whole-experiment or mean-interval policy enum.
-2. `IO/ExperimentFileReader.cs` reads JSON files into a local list and returns the dataset only when every file succeeds. A read or parse failure includes the operation and path and stops the console workflow before analysis.
-3. `Validation/ExperimentFactory.cs` validates each successfully read experiment and returns `Result<ValidatedExperiment, DomainError>`; success carries an isolated snapshot and failure carries a structured domain error.
-4. `Physics/ThermodynamicsCalculator.cs` calculates elapsed time, temperature change, and supplied energy. `Physics/IntervalCalculator.cs` creates interval values for the mean-interval policy.
-5. `Pipeline/ExperimentPipeline.cs` selects the estimator for the chosen policy; `Pipeline/AnalysisPolicy.cs` calls the relevant calculation and estimator stages in `Physics/HeatCapacityEstimator.cs`.
-6. `Pipeline/ExperimentPipeline.cs` returns a structured `Result` for each experiment and for batch-level failures. Per-experiment validation or calculation failures become rejected entries; `Program.cs` matches the batch result and prints each rejection reason.
-7. The successful batch report is printed to stdout and written as indented JSON by `IO/ReportWriter.cs`. Enum values are serialized as strings.
+The conversion sequence is materialized once with `ToArray()`. If any conversion returns `Result.Failure`, the workflow returns that same `DomainError`; accuracy, material summaries, and score views are built only after every accepted report converts successfully. The console writes and prints the combined report only after the full workflow succeeds. Input, analysis/native conversion, and output errors print to stderr and return a nonzero exit code.
 
-The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the application locates `Data/experiments`, selects `whole`, and writes a policy-named report in `Data/reports`. The output directory is created when needed. The console matches reader and batch-analysis `Result` cases explicitly. It prints file or dataset errors before stopping; after successful batch processing it prints each rejected file and its reason, then writes the complete report.
+The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the app locates `Data/experiments`, selects `whole`, and writes a policy-named JSON file in `Data/reports`. The output directory is created when needed. Per-record validation and calculation failures remain in `BatchReport.Rejected`, and the console prints each rejection after writing the complete report.
 
-For the included five-file dataset, the whole-experiment report contains four accepted experiments and one rejected experiment (`experiment-004.json`, whose mass is zero). For `experiment-001.json`, the whole-experiment estimate is approximately 4545.45 J/(kg·K), while the mean-interval estimate is approximately 5333.33 J/(kg·K). Its reference value is 4180 J/(kg·K). The checked-in whole-policy example is [`Data/reports/batch-report-whole.json`](Data/reports/batch-report-whole.json).
+For the included five-file dataset, whole-experiment analysis accepts four experiments and rejects `experiment-004.json` because its mass is zero. The accuracy ranking orders them by percentage error descending: oil (`70%`), aluminum (`48.1481%`), water experiment 001 (`8.7429%`), and water experiment 002 (`4.3062%`). Material summaries include water (2 experiments, `18,000 J` total), aluminum (1, `3,600 J`), and oil (1, `1,500 J`). Water's mean estimate is approximately `4,272.73 J/(kg·K)` with mean percentage error `6.5246%`. For experiment 001, whole-experiment and mean-interval estimates are approximately `4,545.45` and `5,333.33 J/(kg·K)` respectively, against a reference of `4,180 J/(kg·K)`. The batch example remains at [`Data/reports/batch-report-whole.json`](Data/reports/batch-report-whole.json).
+
+## Assignment 8 reports and scores
+
+`BuildAccuracyRanking` reports one row per reportable experiment. It uses `WhereReportable` to require a finite estimate and a finite, positive reference heat capacity, then `ToAccuracyRows` to project the experiment ID, material, policy, estimate, reference, absolute error, and percentage error. Rows sort by percentage error descending and experiment ID ascending using ordinal comparison.
+
+`BuildMaterialSummaries` groups reportable values by material with ordinal grouping. It reports material, experiment count, mean estimated heat capacity, total supplied energy in joules, and mean percentage error. Inputs with nonfinite percentage error or energy are excluded from this aggregation. Rows sort by total energy descending, then material ascending using ordinal comparison.
+
+The sample accuracy values and material aggregates are shown above. For the first water experiment, the score configurations produce different results from the same `8.7429%` error: lenient penalty `0.5` gives about `95.6285`, while strict penalty `2.0` gives about `82.5141`. `ExperimentScore.CreateScore` is curried: it captures a `ScoreConfiguration` and returns a `Func<ExperimentReport, double>` using `Math.Max(0, 100 - percentageError × PenaltyPerErrorPercent)`. The scores are clamped at zero.
+
+`WhereReportable` and `ToAccuracyRows` extend `IEnumerable<ExperimentReport>` because both are reusable sequence operations that can compose with arrays, lists, and other LINQ sequences. Their receiver type avoids tying the transformations to one collection implementation.
+
+## Deferred conversions, snapshots, and ownership
+
+`ExperimentStream.EnumerateEnergyConversions` is lazy: creating its enumerable performs no conversion. Each enumeration calls the converter again for every report. `AnalyzeAssignment8` calls `ToArray()` once and reuses that snapshot while checking failures and building the output. Reusing the array does not repeat native calls.
+
+The input reader owns and closes each file read before returning records. Validated experiments own copied, read-only measurement snapshots. The conversion iterator owns no files or native handles; the runtime owns the loaded native library for the process lifetime. The workflow retains materialized reports and conversions in `Assignment8Reports`, so memory use grows with the number of accepted experiments. Streaming avoids retaining all conversions but repeats work on another pass; a snapshot costs memory and gives stable, repeatable access without recalculation. There are no explicit cleanup calls for the native library handle.
 
 ## Native energy conversion
 
-The native library exports `pda_joules_to_watt_hours(double)`. It returns `-1.0` for negative input and `joules / 3600.0` otherwise. The shared library path is chosen by the C# native-library loader, not by the C source file.
+The C function `pda_joules_to_watt_hours(double)` returns `-1.0` for negative input and `joules / 3600.0` otherwise. `NativeEnergyAdapter` rejects negative, NaN, and infinite inputs before calling C, and turns library or missing-entry-point errors into `Result<double, DomainError>` failures. The P/Invoke declaration uses `double` for both the parameter and result, the exact C export name, and the C calling convention.
 
-The checked build target is macOS arm64. It uses Apple clang 21.0.0 (`clang-2100.0.123.102`) and builds with this command from the native energy directory:
+The verified build target is macOS arm64. It was compiled with Apple clang 21.0.0 (`clang-2100.0.123.102`) using this command from the repository root:
 
 ```bash
-clang -arch arm64 -dynamiclib -std=c11 -O2 -Wall -Wextra -Werror -o build/macos-arm64/libpda_energy.dylib energy_conversion.c
+mkdir -p ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64
+clang -arch arm64 -dynamiclib -std=c11 -O2 -Wall -Wextra -Werror -o ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib ThermodynamicsDataAnalyzer/native/energy/energy_conversion.c
 ```
 
-Run `sh ThermodynamicsDataAnalyzer/native/energy/build.sh` from the repository root to produce `ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib`.
+The output is `ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib`. On Windows x64, compile the same source from a Visual Studio Developer Command Prompt with `cl /LD /O2 /W4 ThermodynamicsDataAnalyzer\native\energy\energy_conversion.c /Fe:ThermodynamicsDataAnalyzer\native\energy\build\windows-x64\pda_energy.dll`; the source exports the function with `__declspec(dllexport)`. A Windows compiler was not available for verification in this environment, and no Windows DLL is checked in.
+
+The project files copy an existing macOS dylib or Windows DLL beside the application and test assemblies. The runtime loads `pda_energy` by the operating system's native naming rules. The previous integration issue was that a library in the native source tree was not beside the managed assembly; copying the compiled artifact to the output directory resolves lookup for normal app and test runs. A manual native call with `3600` joules returned `1` watt-hour; the adapter test also checks this real conversion.
 
 ## Build and run
 
@@ -153,7 +166,7 @@ To demonstrate an input error caused by a missing dataset folder:
 dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- /tmp/does-not-exist
 ```
 
-This prints an `Input error` and exits with a nonzero status. To demonstrate a rejected experiment while the batch continues, run against the included dataset: the zero-mass file appears in the report's `Rejected` list and the valid experiments are still analyzed.
+This prints an `Input error` and exits with a nonzero status. To demonstrate a rejected experiment while the batch continues, run against the included dataset: the zero-mass file appears in the report's `Rejected` list and the valid experiments are still analyzed. The integrated workflow returns a failure and writes no output report when native conversion fails.
 
 For the remaining failure demonstrations, run the focused tests from the repository root. They create and remove temporary files and directories themselves:
 
@@ -164,6 +177,8 @@ dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~Ex
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentPipelineTests.ReturnsDomainFailureWhenCalculationCannotProducePositiveEstimate'
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentFileReaderTests.ReportsMissingFileWithOperationAndPath'
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentFileReaderTests.ReportsMalformedJsonWithOperationAndPath'
+dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~Assignment8WorkflowTests.ReturnsNativeFailureWithoutProducingPartialReports'
+dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~NativeEnergyAdapterTests.ConvertsLoadingFailureToStructuredError'
 ```
 
 The factory test includes mass, minimum measurement count, and timestamp-order failures among all factory rules. The final two file-reader tests verify the error operation and temporary path. The malformed-dataset test also confirms no partial record list is returned when a later file fails.
@@ -180,9 +195,9 @@ dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.cspro
 dotnet test PhysicsDataAnalyzer.sln --no-restore
 ```
 
-The suite contains 59 cumulative xUnit tests, well above the 10-test minimum. Tests cover factory success and every structured rejection rule, both `Result` cases, lookup presence and absence, `Map` and `Bind` success and failure propagation, the real analysis chain, short-circuit behavior, file errors, and batch and report behavior. The submitted project includes all tests and the five sample input files in `ThermodynamicsDataAnalyzer/Data/experiments`.
+The suite has 77 passing test cases, including more than 8 pure-function and domain cases, two complete Assignment 8 workflow tests, and missing-file and malformed-JSON boundary cases. Coverage includes report query values and tie ordering, extension filtering and projection, scoring, deferred conversion and snapshots, real native conversion, adapter input and loading failures, result propagation, and accepted/rejected batch processing. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
 
-**Latest observed result (2026-10-23):** 59 total, 59 passed, 0 failed, 0 skipped. Verified with `dotnet test PhysicsDataAnalyzer.sln --no-restore -m:1 -nodeReuse:false` using SDK `10.0.400`.
+Verified with .NET SDK `10.0.400` on 2026-10-31 using `dotnet test ThermodynamicsDataAnalyzer.Tests/ThermodynamicsDataAnalyzer.Tests.csproj --no-restore -m:1 --verbosity quiet`: 77 passed, 0 failed, 0 skipped. The test project build completed with 0 warnings and 0 errors.
 
 ## Requirement-to-file and method mapping
 
@@ -199,6 +214,12 @@ The suite contains 59 cumulative xUnit tests, well above the 10-test minimum. Te
 | Explicit experiment lookup | `Models/Maybe.cs`; `Pipeline/ExperimentCatalog.cs` — `FindById` |
 | Result composition with `Bind` and `Map`, and accepted/rejected batch outcomes | `Models/Result.cs`; `Models/DomainError.cs`; `Pipeline/ExperimentPipeline.cs` — `Lookup`, `Analyze`, `AnalyzeBatch`, `TryAnalyzeBatch`, `CreateResult`; `Models/ExperimentBatchReport.cs` |
 | Report models and JSON output | `Models/ExperimentReport.cs`, `Models/AnalysisResult.cs`, `IO/ReportWriter.cs` — `TryWriteReport`, `TryWriteBatchReport` |
+| Accuracy and material reports | `Models/ExperimentAccuracyRow.cs`, `Models/MaterialSummaryRow.cs`, `Reports/ExperimentReportQueries.cs` — `BuildAccuracyRanking`, `BuildMaterialSummaries` |
+| Reusable report sequences | `Extensions/ExperimentReportExtensions.cs` — `WhereReportable`, `ToAccuracyRows` |
+| Curried scoring | `Pipeline/ExperimentScore.cs` — `ScoreConfiguration.Lenient`, `ScoreConfiguration.Strict`, `CreateScore`; `Reports/ExperimentReportQueries.cs` — `BuildScoredReports` |
+| Deferred native conversion | `Pipeline/ExperimentStream.cs` — `INativeEnergyConverter`, `EnumerateEnergyConversions`; `Interop/NativeEnergy.cs`; `Interop/NativeEnergyAdapter.cs`; `native/energy/energy_conversion.c` |
+| Complete Assignment 8 workflow | `Pipeline/ExperimentPipeline.cs` — `AnalyzeAssignment8`; `Models/Assignment8Reports.cs`; `Program.cs`; `IO/ReportWriter.cs` — `TryWriteJson` |
+| Assignment 8 and native tests | `Assignment8WorkflowTests.cs`, `ExperimentReportQueriesTests.cs`, `ExperimentReportExtensionsTests.cs`, `ExperimentScoreTests.cs`, `ExperimentStreamTests.cs`, `NativeEnergyAdapterTests.cs`, `ExperimentFileReaderTests.cs` |
 | Result, factory, lookup, reader, pipeline, and physics tests | `ThermodynamicsDataAnalyzer.Tests/ResultTests.cs`, `ExperimentFactoryTests.cs`, `ExperimentCatalogTests.cs`, `ExperimentFileReaderTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `TestData.cs` |
 
 ## Report sequences and snapshots
@@ -215,4 +236,4 @@ The submission archive contains the solution, application and test source, READM
 
 | Name | Group | Concrete contribution |
 |---|---|---|
-| Ayan Rakhimov | IT-2513 | Implemented the experiment models and validation, thermodynamics calculations, both specific-heat policies, JSON dataset reader and report writer, batch pipeline and CLI, example experiment data, and xUnit coverage. This README describes the implemented workflow, requirements mapping, and commands. |
+| Ayan Rakhimov | IT-2513 | Implemented the experiment models and validation, thermodynamics calculations, both specific-heat policies, JSON dataset reader and report writer, batch and Assignment 8 pipelines, report queries and scoring, native conversion integration, example experiment data, tests, and this documentation. |
