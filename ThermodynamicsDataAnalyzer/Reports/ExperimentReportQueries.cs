@@ -37,7 +37,7 @@ public static class ExperimentReportQueries
             .ToArray();
     }
 
-    public static IReadOnlyList<(ExperimentReport Report, double Score)> BuildScoredReports(
+    public static IReadOnlyList<ScoredExperimentRow> BuildScoredReports(
         IEnumerable<ExperimentReport> reports,
         Func<ExperimentReport, double> score)
     {
@@ -46,7 +46,7 @@ public static class ExperimentReportQueries
 
         return reports
             .WhereReportable()
-            .Select(report => (Report: report, Score: score(report)))
+            .Select(report => new ScoredExperimentRow(report, score(report)))
             .ToArray();
     }
 

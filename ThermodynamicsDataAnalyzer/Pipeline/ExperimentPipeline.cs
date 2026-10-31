@@ -1,6 +1,7 @@
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Physics;
 using PhysicsDataAnalyzer.Validation;
+using PhysicsDataAnalyzer.Reports;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 using EstimatorPolicy = PhysicsDataAnalyzer.Pipeline.AnalysisPolicy;
 
@@ -9,6 +10,43 @@ namespace PhysicsDataAnalyzer.Pipeline;
 public static class ExperimentPipeline
 {
     private sealed record AnalysisData(ValidatedExperiment Experiment, double Estimate);
+
+    public static Result<Assignment8Reports, DomainError> AnalyzeAssignment8(
+        IReadOnlyList<ExperimentFileRecord>? records,
+        AnalysisPolicyType policy,
+        INativeEnergyConverter converter)
+    {
+        ArgumentNullException.ThrowIfNull(converter);
+
+        switch (AnalyzeBatch(records, policy))
+        {
+            case Result<ExperimentBatchReport, DomainError>.Failure failure:
+                return new Result<Assignment8Reports, DomainError>.Failure(failure.Error);
+            case Result<ExperimentBatchReport, DomainError>.Success success:
+                ExperimentReport[] reports = success.Value.Accepted.Select(item => item.Report).ToArray();
+                EnergyConversionResult[] conversions = ExperimentStream
+                    .EnumerateEnergyConversions(reports, converter)
+                    .ToArray();
+
+                foreach (EnergyConversionResult conversion in conversions)
+                {
+                    if (conversion.ConvertedEnergy is Result<double, DomainError>.Failure conversionFailure)
+                        return new Result<Assignment8Reports, DomainError>.Failure(conversionFailure.Error);
+                }
+
+                Func<ExperimentReport, double> lenient = ExperimentScore.CreateScore(ScoreConfiguration.Lenient);
+                Func<ExperimentReport, double> strict = ExperimentScore.CreateScore(ScoreConfiguration.Strict);
+                return new Result<Assignment8Reports, DomainError>.Success(new Assignment8Reports(
+                    success.Value,
+                    conversions,
+                    ExperimentReportQueries.BuildAccuracyRanking(reports),
+                    ExperimentReportQueries.BuildMaterialSummaries(reports),
+                    ExperimentReportQueries.BuildScoredReports(reports, lenient),
+                    ExperimentReportQueries.BuildScoredReports(reports, strict)));
+            default:
+                throw new InvalidOperationException("Unknown batch analysis result");
+        }
+    }
 
     public static bool TryAnalyzeBatch(
         IReadOnlyList<ExperimentFileRecord>? records,

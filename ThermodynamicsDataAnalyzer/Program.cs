@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using PhysicsDataAnalyzer.IO;
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
+using PhysicsDataAnalyzer.Interop;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 string datasetDirectory = args.Length > 0
@@ -52,14 +53,14 @@ switch (datasetResult)
         return 1;
 }
 
-var batchResult = ExperimentPipeline.AnalyzeBatch(records, selectedPolicy);
-ExperimentBatchReport report;
-switch (batchResult)
+var workflowResult = ExperimentPipeline.AnalyzeAssignment8(records, selectedPolicy, new NativeEnergyAdapter());
+Assignment8Reports report;
+switch (workflowResult)
 {
-    case Result<ExperimentBatchReport, DomainError>.Success success:
+    case Result<Assignment8Reports, DomainError>.Success success:
         report = success.Value;
         break;
-    case Result<ExperimentBatchReport, DomainError>.Failure failure:
+    case Result<Assignment8Reports, DomainError>.Failure failure:
         Console.Error.WriteLine($"Analysis error: {failure.Error.Message}");
         return 1;
     default:
@@ -70,15 +71,14 @@ switch (batchResult)
 var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
 jsonOptions.Converters.Add(new JsonStringEnumConverter());
 
-Console.WriteLine(JsonSerializer.Serialize(report, jsonOptions));
-
-if (!ReportWriter.TryWriteBatchReport(report, outputPath, out string? errorMessage))
+if (!ReportWriter.TryWriteJson(report, outputPath, out string? errorMessage))
 {
     Console.Error.WriteLine($"Output error: {errorMessage}");
     return 1;
 }
-Console.WriteLine($"Accepted {report.Accepted.Count} of {report.TotalRecords} records, rejected {report.Rejected.Count}.");
-foreach (RejectedExperiment rejected in report.Rejected)
+Console.WriteLine(JsonSerializer.Serialize(report, jsonOptions));
+Console.WriteLine($"Accepted {report.BatchReport.Accepted.Count} of {report.BatchReport.TotalRecords} records, rejected {report.BatchReport.Rejected.Count}.");
+foreach (RejectedExperiment rejected in report.BatchReport.Rejected)
     Console.Error.WriteLine($"Rejected {rejected.SourceFile}: {rejected.Reason}");
 
 Console.WriteLine($"Report saved to {outputPath}");

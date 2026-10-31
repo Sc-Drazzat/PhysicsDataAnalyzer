@@ -18,6 +18,6 @@ public class ExperimentScoreTests
         Assert.Equal(60, strictScore(report));
 
         var scoredReports = ExperimentReportQueries.BuildScoredReports(new[] { report }, strictScore);
-        Assert.Equal((report, 60d), Assert.Single(scoredReports));
+        Assert.Equal(new ScoredExperimentRow(report, 60), Assert.Single(scoredReports));
     }
 }
