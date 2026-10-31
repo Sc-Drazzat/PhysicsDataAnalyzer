@@ -23,4 +23,9 @@
         <ProjectReference Include="..\ThermodynamicsDataAnalyzer\ThermodynamicsDataAnalyzer.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Include="..\ThermodynamicsDataAnalyzer\native\energy\build\macos-arm64\libpda_energy.dylib" Link="libpda_energy.dylib" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\ThermodynamicsDataAnalyzer\native\energy\build\macos-arm64\libpda_energy.dylib')" />
+        <None Include="..\ThermodynamicsDataAnalyzer\native\energy\build\windows-x64\pda_energy.dll" Link="pda_energy.dll" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\ThermodynamicsDataAnalyzer\native\energy\build\windows-x64\pda_energy.dll')" />
+    </ItemGroup>
+
 </Project>

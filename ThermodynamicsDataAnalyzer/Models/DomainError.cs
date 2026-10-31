@@ -27,6 +27,9 @@ public sealed record DomainError
         public const string DatasetReadFailed = "io.dataset.read.failed";
         public const string DatasetAccessDenied = "io.dataset.access.denied";
         public const string AnalysisBatchDatasetRequired = "analysis.batch.dataset.required";
+        public const string NativeEnergyInputInvalid = "native.energy.input.invalid";
+        public const string NativeLibraryUnavailable = "native.energy.library.unavailable";
+        public const string NativeEntryPointUnavailable = "native.energy.entry_point.unavailable";
     }
 
     public string Code { get; }

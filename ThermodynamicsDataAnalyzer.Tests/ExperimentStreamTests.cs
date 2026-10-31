@@ -44,10 +44,10 @@ public class ExperimentStreamTests
     {
         public int CallCount { get; private set; }
 
-        public double ConvertJoules(double energyJoules)
+        public Result<double, DomainError> ConvertJoules(double energyJoules)
         {
             CallCount++;
-            return energyJoules / 1000;
+            return new Result<double, DomainError>.Success(energyJoules / 1000);
         }
     }
 }

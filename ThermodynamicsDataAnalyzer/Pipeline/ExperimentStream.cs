@@ -4,13 +4,13 @@ namespace PhysicsDataAnalyzer.Pipeline;
 
 public interface INativeEnergyConverter
 {
-    double ConvertJoules(double energyJoules);
+    Result<double, DomainError> ConvertJoules(double energyJoules);
 }
 
 public sealed record EnergyConversionResult(
     string ExperimentId,
     double EnergyJoules,
-    double ConvertedEnergy);
+    Result<double, DomainError> ConvertedEnergy);
 
 public static class ExperimentStream
 {
