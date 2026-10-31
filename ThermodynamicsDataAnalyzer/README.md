@@ -99,15 +99,15 @@ The prerequisites are valid measurements, positive mass, heater power and refere
 
 ## Pipeline and output
 
-The workflow reads command-line arguments, selects `whole` or `mean`, then calls `ExperimentFileReader.TryReadDataset`. `ExperimentPipeline.AnalyzeAssignment8` calls the existing `AnalyzeBatch`, preserving batch `Result` failures and accepted/rejected per-record outcomes. It takes only accepted `ExperimentReport` values and passes them to `ExperimentStream.EnumerateEnergyConversions` with `NativeEnergyAdapter`.
+The workflow reads command-line arguments, selects `whole` or `mean`, then calls `ExperimentFileReader.TryReadDataset`. `ExperimentPipeline.AnalyzeWithReports` calls the existing `AnalyzeBatch`, preserving batch `Result` failures and accepted/rejected per-record outcomes. It takes only accepted `ExperimentReport` values and passes them to `ExperimentStream.EnumerateEnergyConversions` with `NativeEnergyAdapter`.
 
-The conversion sequence is materialized once with `ToArray()`. If any conversion returns `Result.Failure`, the workflow returns that same `DomainError`; accuracy, material summaries, and score views are built only after every accepted report converts successfully. The console writes and prints the combined report only after the full workflow succeeds. Input, analysis/native conversion, and output errors print to stderr and return a nonzero exit code.
+The conversion sequence is materialized once with `ToArray()`. If any conversion returns `Result.Failure`, the workflow returns that same `DomainError`; accuracy, material summaries, and score views are built only after every accepted report converts successfully. Successful conversion values are unwrapped into `EnergyConversionReport` rows with a numeric `WattHours` field before JSON serialization. The console writes and prints the combined report only after the full workflow succeeds. Input, analysis/native conversion, and output errors print to stderr and return a nonzero exit code.
 
 The command-line arguments are `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`. If omitted, the app locates `Data/experiments`, selects `whole`, and writes a policy-named JSON file in `Data/reports`. The output directory is created when needed. Per-record validation and calculation failures remain in `BatchReport.Rejected`, and the console prints each rejection after writing the complete report.
 
 For the included five-file dataset, whole-experiment analysis accepts four experiments and rejects `experiment-004.json` because its mass is zero. The accuracy ranking orders them by percentage error descending: oil (`70%`), aluminum (`48.1481%`), water experiment 001 (`8.7429%`), and water experiment 002 (`4.3062%`). Material summaries include water (2 experiments, `18,000 J` total), aluminum (1, `3,600 J`), and oil (1, `1,500 J`). Water's mean estimate is approximately `4,272.73 J/(kg·K)` with mean percentage error `6.5246%`. For experiment 001, whole-experiment and mean-interval estimates are approximately `4,545.45` and `5,333.33 J/(kg·K)` respectively, against a reference of `4,180 J/(kg·K)`. The batch example remains at [`Data/reports/batch-report-whole.json`](Data/reports/batch-report-whole.json).
 
-## Assignment 8 reports and scores
+## Reports and scores
 
 `BuildAccuracyRanking` reports one row per reportable experiment. It uses `WhereReportable` to require a finite estimate and a finite, positive reference heat capacity, then `ToAccuracyRows` to project the experiment ID, material, policy, estimate, reference, absolute error, and percentage error. Rows sort by percentage error descending and experiment ID ascending using ordinal comparison.
 
@@ -119,9 +119,9 @@ The sample accuracy values and material aggregates are shown above. For the firs
 
 ## Deferred conversions, snapshots, and ownership
 
-`ExperimentStream.EnumerateEnergyConversions` is lazy: creating its enumerable performs no conversion. Each enumeration calls the converter again for every report. `AnalyzeAssignment8` calls `ToArray()` once and reuses that snapshot while checking failures and building the output. Reusing the array does not repeat native calls.
+`ExperimentStream.EnumerateEnergyConversions` is lazy: creating its enumerable performs no conversion. Each enumeration calls the converter again for every report. `AnalyzeWithReports` calls `ToArray()` once and reuses that snapshot while checking failures and building the output. Reusing the array does not repeat native calls.
 
-The input reader owns and closes each file read before returning records. Validated experiments own copied, read-only measurement snapshots. The conversion iterator owns no files or native handles; the runtime owns the loaded native library for the process lifetime. The workflow retains materialized reports and conversions in `Assignment8Reports`, so memory use grows with the number of accepted experiments. Streaming avoids retaining all conversions but repeats work on another pass; a snapshot costs memory and gives stable, repeatable access without recalculation. There are no explicit cleanup calls for the native library handle.
+The input reader owns and closes each file read before returning records. Validated experiments own copied, read-only measurement snapshots. The conversion iterator owns no files or native handles; the runtime owns the loaded native library for the process lifetime. The workflow retains materialized reports and conversions in `ExperimentAnalysisReports`, so memory use grows with the number of accepted experiments. Streaming avoids retaining all conversions but repeats work on another pass; a snapshot costs memory and gives stable, repeatable access without recalculation. There are no explicit cleanup calls for the native library handle.
 
 ## Native energy conversion
 
@@ -177,7 +177,7 @@ dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~Ex
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentPipelineTests.ReturnsDomainFailureWhenCalculationCannotProducePositiveEstimate'
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentFileReaderTests.ReportsMissingFileWithOperationAndPath'
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentFileReaderTests.ReportsMalformedJsonWithOperationAndPath'
-dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~Assignment8WorkflowTests.ReturnsNativeFailureWithoutProducingPartialReports'
+dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~ExperimentWorkflowTests.ReturnsNativeFailureWithoutProducingPartialReports'
 dotnet test PhysicsDataAnalyzer.sln --no-restore --filter 'FullyQualifiedName~NativeEnergyAdapterTests.ConvertsLoadingFailureToStructuredError'
 ```
 
@@ -195,7 +195,7 @@ dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.cspro
 dotnet test PhysicsDataAnalyzer.sln --no-restore
 ```
 
-The suite has 77 passing test cases, including more than 8 pure-function and domain cases, two complete Assignment 8 workflow tests, and missing-file and malformed-JSON boundary cases. Coverage includes report query values and tie ordering, extension filtering and projection, scoring, deferred conversion and snapshots, real native conversion, adapter input and loading failures, result propagation, and accepted/rejected batch processing. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
+The suite has 77 passing test cases, including more than 8 pure-function and domain cases, two complete report workflow tests, and missing-file and malformed-JSON boundary cases. Coverage includes report query values and tie ordering, extension filtering and projection, scoring, deferred conversion and snapshots, real native conversion, adapter input and loading failures, result propagation, and accepted/rejected batch processing. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
 
 Verified with .NET SDK `10.0.400` on 2026-10-31 using `dotnet test ThermodynamicsDataAnalyzer.Tests/ThermodynamicsDataAnalyzer.Tests.csproj --no-restore -m:1 --verbosity quiet`: 77 passed, 0 failed, 0 skipped. The test project build completed with 0 warnings and 0 errors.
 
@@ -218,8 +218,8 @@ Verified with .NET SDK `10.0.400` on 2026-10-31 using `dotnet test Thermodynamic
 | Reusable report sequences | `Extensions/ExperimentReportExtensions.cs` — `WhereReportable`, `ToAccuracyRows` |
 | Curried scoring | `Pipeline/ExperimentScore.cs` — `ScoreConfiguration.Lenient`, `ScoreConfiguration.Strict`, `CreateScore`; `Reports/ExperimentReportQueries.cs` — `BuildScoredReports` |
 | Deferred native conversion | `Pipeline/ExperimentStream.cs` — `INativeEnergyConverter`, `EnumerateEnergyConversions`; `Interop/NativeEnergy.cs`; `Interop/NativeEnergyAdapter.cs`; `native/energy/energy_conversion.c` |
-| Complete Assignment 8 workflow | `Pipeline/ExperimentPipeline.cs` — `AnalyzeAssignment8`; `Models/Assignment8Reports.cs`; `Program.cs`; `IO/ReportWriter.cs` — `TryWriteJson` |
-| Assignment 8 and native tests | `Assignment8WorkflowTests.cs`, `ExperimentReportQueriesTests.cs`, `ExperimentReportExtensionsTests.cs`, `ExperimentScoreTests.cs`, `ExperimentStreamTests.cs`, `NativeEnergyAdapterTests.cs`, `ExperimentFileReaderTests.cs` |
+| Combined report workflow | `Pipeline/ExperimentPipeline.cs` — `AnalyzeWithReports`; `Models/ExperimentAnalysisReports.cs`; `Program.cs`; `IO/ReportWriter.cs` — `TryWriteJson` |
+| Report and native tests | `ExperimentWorkflowTests.cs`, `ExperimentReportQueriesTests.cs`, `ExperimentReportExtensionsTests.cs`, `ExperimentScoreTests.cs`, `ExperimentStreamTests.cs`, `NativeEnergyAdapterTests.cs`, `ExperimentFileReaderTests.cs` |
 | Result, factory, lookup, reader, pipeline, and physics tests | `ThermodynamicsDataAnalyzer.Tests/ResultTests.cs`, `ExperimentFactoryTests.cs`, `ExperimentCatalogTests.cs`, `ExperimentFileReaderTests.cs`, `ExperimentPipelineTests.cs`, `ExperimentBatchPipelineTests.cs`, `ExperimentValidatorTests.cs`, `ThermodynamicsCalculatorTests.cs`, `SpecificHeatEstimatorTests.cs`, `TestData.cs` |
 
 ## Report sequences and snapshots
@@ -236,4 +236,4 @@ The submission archive contains the solution, application and test source, READM
 
 | Name | Group | Concrete contribution |
 |---|---|---|
-| Ayan Rakhimov | IT-2513 | Implemented the experiment models and validation, thermodynamics calculations, both specific-heat policies, JSON dataset reader and report writer, batch and Assignment 8 pipelines, report queries and scoring, native conversion integration, example experiment data, tests, and this documentation. |
+| Ayan Rakhimov | IT-2513 | Implemented the experiment models and validation, thermodynamics calculations, both specific-heat policies, JSON dataset reader and report writer, batch and combined report pipelines, report queries and scoring, native conversion integration, example experiment data, tests, and this documentation. |

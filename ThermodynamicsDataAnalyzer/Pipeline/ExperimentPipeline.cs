@@ -11,7 +11,7 @@ public static class ExperimentPipeline
 {
     private sealed record AnalysisData(ValidatedExperiment Experiment, double Estimate);
 
-    public static Result<Assignment8Reports, DomainError> AnalyzeAssignment8(
+    public static Result<ExperimentAnalysisReports, DomainError> AnalyzeWithReports(
         IReadOnlyList<ExperimentFileRecord>? records,
         AnalysisPolicyType policy,
         INativeEnergyConverter converter)
@@ -21,24 +21,36 @@ public static class ExperimentPipeline
         switch (AnalyzeBatch(records, policy))
         {
             case Result<ExperimentBatchReport, DomainError>.Failure failure:
-                return new Result<Assignment8Reports, DomainError>.Failure(failure.Error);
+                return new Result<ExperimentAnalysisReports, DomainError>.Failure(failure.Error);
             case Result<ExperimentBatchReport, DomainError>.Success success:
                 ExperimentReport[] reports = success.Value.Accepted.Select(item => item.Report).ToArray();
                 EnergyConversionResult[] conversions = ExperimentStream
                     .EnumerateEnergyConversions(reports, converter)
                     .ToArray();
 
+                var conversionReports = new List<EnergyConversionReport>(conversions.Length);
                 foreach (EnergyConversionResult conversion in conversions)
                 {
-                    if (conversion.ConvertedEnergy is Result<double, DomainError>.Failure conversionFailure)
-                        return new Result<Assignment8Reports, DomainError>.Failure(conversionFailure.Error);
+                    switch (conversion.ConvertedEnergy)
+                    {
+                        case Result<double, DomainError>.Failure conversionFailure:
+                            return new Result<ExperimentAnalysisReports, DomainError>.Failure(conversionFailure.Error);
+                        case Result<double, DomainError>.Success converted:
+                            conversionReports.Add(new EnergyConversionReport(
+                                conversion.ExperimentId,
+                                conversion.EnergyJoules,
+                                converted.Value));
+                            break;
+                        default:
+                            throw new InvalidOperationException("Unknown energy conversion result");
+                    }
                 }
 
                 Func<ExperimentReport, double> lenient = ExperimentScore.CreateScore(ScoreConfiguration.Lenient);
                 Func<ExperimentReport, double> strict = ExperimentScore.CreateScore(ScoreConfiguration.Strict);
-                return new Result<Assignment8Reports, DomainError>.Success(new Assignment8Reports(
+                return new Result<ExperimentAnalysisReports, DomainError>.Success(new ExperimentAnalysisReports(
                     success.Value,
-                    conversions,
+                    conversionReports.AsReadOnly(),
                     ExperimentReportQueries.BuildAccuracyRanking(reports),
                     ExperimentReportQueries.BuildMaterialSummaries(reports),
                     ExperimentReportQueries.BuildScoredReports(reports, lenient),

@@ -1,10 +1,11 @@
+using System.Text.Json;
 using PhysicsDataAnalyzer.Interop;
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
 
 namespace PhysicsDataAnalyzer.Tests;
 
-public class Assignment8WorkflowTests
+public class ExperimentWorkflowTests
 {
     [Fact]
     public void BuildsBothReportsAndRealNativeConversionsForAcceptedExperiments()
@@ -15,21 +16,21 @@ public class Assignment8WorkflowTests
             new ExperimentFileRecord("two.json", TestData.ValidExperiment() with { ExperimentId = "two", Material = "oil" }, null)
         };
 
-        var result = ExperimentPipeline.AnalyzeAssignment8(
+        var result = ExperimentPipeline.AnalyzeWithReports(
             records,
             PhysicsDataAnalyzer.Models.AnalysisPolicy.WholeExperiment,
             new NativeEnergyAdapter());
 
-        var report = Assert.IsType<Result<Assignment8Reports, DomainError>.Success>(result).Value;
+        var report = Assert.IsType<Result<ExperimentAnalysisReports, DomainError>.Success>(result).Value;
         Assert.Equal(2, report.BatchReport.Accepted.Count);
         Assert.Equal(2, report.AccuracyRanking.Count);
         Assert.Equal(2, report.MaterialSummaries.Count);
         Assert.Equal(2, report.EnergyConversions.Count);
         Assert.All(report.EnergyConversions, conversion =>
-        {
-            var converted = Assert.IsType<Result<double, DomainError>.Success>(conversion.ConvertedEnergy).Value;
-            Assert.Equal(conversion.EnergyJoules / 3600, converted);
-        });
+            Assert.Equal(conversion.EnergyJoules / 3600, conversion.WattHours));
+        string json = JsonSerializer.Serialize(report);
+        Assert.Contains("\"WattHours\"", json);
+        Assert.DoesNotContain("\"EnergyConversions\":[{}", json);
         Assert.Equal(2, report.LenientScores.Count);
         Assert.Equal(2, report.StrictScores.Count);
     }
@@ -44,12 +45,12 @@ public class Assignment8WorkflowTests
         var expectedError = new DomainError("test.native.failure", "Native conversion failed.");
         var converter = new FailingEnergyConverter(expectedError);
 
-        var result = ExperimentPipeline.AnalyzeAssignment8(
+        var result = ExperimentPipeline.AnalyzeWithReports(
             records,
             PhysicsDataAnalyzer.Models.AnalysisPolicy.WholeExperiment,
             converter);
 
-        var error = Assert.IsType<Result<Assignment8Reports, DomainError>.Failure>(result).Error;
+        var error = Assert.IsType<Result<ExperimentAnalysisReports, DomainError>.Failure>(result).Error;
         Assert.Equal(expectedError, error);
         Assert.Equal(1, converter.CallCount);
     }

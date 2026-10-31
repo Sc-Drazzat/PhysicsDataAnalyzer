@@ -53,14 +53,14 @@ switch (datasetResult)
         return 1;
 }
 
-var workflowResult = ExperimentPipeline.AnalyzeAssignment8(records, selectedPolicy, new NativeEnergyAdapter());
-Assignment8Reports report;
+var workflowResult = ExperimentPipeline.AnalyzeWithReports(records, selectedPolicy, new NativeEnergyAdapter());
+ExperimentAnalysisReports report;
 switch (workflowResult)
 {
-    case Result<Assignment8Reports, DomainError>.Success success:
+    case Result<ExperimentAnalysisReports, DomainError>.Success success:
         report = success.Value;
         break;
-    case Result<Assignment8Reports, DomainError>.Failure failure:
+    case Result<ExperimentAnalysisReports, DomainError>.Failure failure:
         Console.Error.WriteLine($"Analysis error: {failure.Error.Message}");
         return 1;
     default:

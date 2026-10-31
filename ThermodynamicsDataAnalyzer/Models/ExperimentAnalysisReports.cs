@@ -2,9 +2,9 @@ namespace PhysicsDataAnalyzer.Models;
 
 using PhysicsDataAnalyzer.Pipeline;
 
-public sealed record Assignment8Reports(
+public sealed record ExperimentAnalysisReports(
     ExperimentBatchReport BatchReport,
-    IReadOnlyList<EnergyConversionResult> EnergyConversions,
+    IReadOnlyList<EnergyConversionReport> EnergyConversions,
     IReadOnlyList<ExperimentAccuracyRow> AccuracyRanking,
     IReadOnlyList<MaterialSummaryRow> MaterialSummaries,
     IReadOnlyList<ScoredExperimentRow> LenientScores,
