@@ -129,6 +129,8 @@ The C function `pda_joules_to_watt_hours(double)` returns `-1.0` for negative in
 
 The verified build target is macOS arm64. It was compiled with Apple clang 21.0.0 (`clang-2100.0.123.102`) using this command from the repository root:
 
+On Windows, run `ThermodynamicsDataAnalyzer/native/energy/build-windows.bat` from a Visual Studio Developer Command Prompt. It uses MSVC `cl.exe` to create `native/energy/build/windows-x64/pda_energy.dll`, which the project copies beside the application when building.
+
 ```bash
 mkdir -p ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64
 clang -arch arm64 -dynamiclib -std=c11 -O2 -Wall -Wextra -Werror -o ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib ThermodynamicsDataAnalyzer/native/energy/energy_conversion.c
