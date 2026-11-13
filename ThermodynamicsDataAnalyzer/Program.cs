@@ -4,11 +4,28 @@ using PhysicsDataAnalyzer.IO;
 using PhysicsDataAnalyzer.Models;
 using PhysicsDataAnalyzer.Pipeline;
 using PhysicsDataAnalyzer.Interop;
+using PhysicsDataAnalyzer.Commands;
 using AnalysisPolicyType = PhysicsDataAnalyzer.Models.AnalysisPolicy;
 
 string datasetDirectory = args.Length > 0
     ? Path.GetFullPath(args[0])
     : FindDefaultDatasetPath();
+
+if (args.Length > 0 && string.Equals(args[0], "create", StringComparison.OrdinalIgnoreCase))
+{
+    string creationPath = args.Length > 1
+        ? args[1]
+        : Path.Combine(FindDefaultDatasetPath(), $"experiment-{DateTime.UtcNow:yyyyMMddHHmmss}.json");
+    try
+    {
+        return CreateExperimentCommand.Run(creationPath);
+    }
+    catch (FormatException exception)
+    {
+        Console.Error.WriteLine($"Input error: {exception.Message}");
+        return 1;
+    }
+}
 
 string policyName = args.Length > 2
     ? args[2].ToLowerInvariant()

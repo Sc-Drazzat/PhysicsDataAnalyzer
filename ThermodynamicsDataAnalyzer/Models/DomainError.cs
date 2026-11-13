@@ -21,6 +21,7 @@ public sealed record DomainError
         public const string FileNotFound = "io.file.not_found";
         public const string FileJsonInvalid = "io.file.json.invalid";
         public const string FileReadFailed = "io.file.read.failed";
+        public const string FileWriteFailed = "io.file.write.failed";
         public const string FileAccessDenied = "io.file.access.denied";
         public const string DatasetPathRequired = "io.dataset.path.required";
         public const string DatasetNotFound = "io.dataset.not_found";
