@@ -27,6 +27,34 @@ if (args.Length > 0 && string.Equals(args[0], "create", StringComparison.Ordinal
     }
 }
 
+if (args.Length > 0 && string.Equals(args[0], "analyze-one", StringComparison.OrdinalIgnoreCase))
+{
+    if (args.Length < 3 || args.Length > 5)
+    {
+        Console.Error.WriteLine("Usage: analyze-one DATASET_DIRECTORY EXPERIMENT_ID [OUTPUT_JSON] [whole|mean]");
+        return 1;
+    }
+
+    string oneDatasetDirectory = args[1];
+    string experimentId = args[2];
+    string? oneOutputPath = args.Length > 3 ? args[3] : null;
+    string onePolicyName = args.Length > 4 ? args[4].ToLowerInvariant() : "whole";
+    AnalysisPolicyType onePolicy = onePolicyName switch
+    {
+        "whole" => AnalysisPolicyType.WholeExperiment,
+        "mean" => AnalysisPolicyType.MeanInterval,
+        _ => (AnalysisPolicyType)(-1)
+    };
+
+    if (!Enum.IsDefined(onePolicy))
+    {
+        Console.Error.WriteLine("Policy must be 'whole' or 'mean'");
+        return 1;
+    }
+
+    return AnalyzeSingleExperimentCommand.Run(oneDatasetDirectory, experimentId, oneOutputPath, onePolicy);
+}
+
 string policyName = args.Length > 2
     ? args[2].ToLowerInvariant()
     : "whole";
