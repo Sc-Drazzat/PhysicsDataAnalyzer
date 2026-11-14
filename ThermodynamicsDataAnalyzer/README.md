@@ -127,18 +127,24 @@ The input reader owns and closes each file read before returning records. Valida
 
 The C function `pda_joules_to_watt_hours(double)` returns `-1.0` for negative input and `joules / 3600.0` otherwise. `NativeEnergyAdapter` rejects negative, NaN, and infinite inputs before calling C, and turns library or missing-entry-point errors into `Result<double, DomainError>` failures. The P/Invoke declaration uses `double` for both the parameter and result, the exact C export name, and the C calling convention.
 
-The verified build target is macOS arm64. It was compiled with Apple clang 21.0.0 (`clang-2100.0.123.102`) using this command from the repository root:
+The native library must be compiled before running the tests that exercise real native conversion. If it is missing, the projects still build, but the native conversion tests fail because `pda_energy` cannot be loaded. On macOS arm64, build it from the repository root with:
 
-On Windows, run `ThermodynamicsDataAnalyzer/native/energy/build-windows.bat` from a Visual Studio Developer Command Prompt. It uses MSVC `cl.exe` to create `native/energy/build/windows-x64/pda_energy.dll`, which the project copies beside the application when building.
+On Windows x64, open an x64 Native Tools Command Prompt for Visual Studio and run the builder from the repository root:
+
+```bat
+ThermodynamicsDataAnalyzer\native\energy\build-windows.bat
+```
+
+The Windows builder checks for the x64 Visual Studio compiler and creates `ThermodynamicsDataAnalyzer\native\energy\build\windows-x64\pda_energy.dll`. The C source exports `pda_joules_to_watt_hours` with `__declspec(dllexport)`. On macOS arm64, run this command from the repository root to create `ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib`:
 
 ```bash
 mkdir -p ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64
 clang -arch arm64 -dynamiclib -std=c11 -O2 -Wall -Wextra -Werror -o ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib ThermodynamicsDataAnalyzer/native/energy/energy_conversion.c
 ```
 
-The output is `ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib`. On Windows x64, compile the same source from a Visual Studio Developer Command Prompt with `cl /LD /O2 /W4 ThermodynamicsDataAnalyzer\native\energy\energy_conversion.c /Fe:ThermodynamicsDataAnalyzer\native\energy\build\windows-x64\pda_energy.dll`; the source exports the function with `__declspec(dllexport)`. A Windows compiler was not available for verification in this environment, and no Windows DLL is checked in.
+A Windows compiler is not available in this macOS environment, so the Windows DLL must be built on Windows with the documented command.
 
-The project files copy an existing macOS dylib or Windows DLL beside the application and test assemblies. The runtime loads `pda_energy` by the operating system's native naming rules. The previous integration issue was that a library in the native source tree was not beside the managed assembly; copying the compiled artifact to the output directory resolves lookup for normal app and test runs. A manual native call with `3600` joules returned `1` watt-hour; the adapter test also checks this real conversion.
+The project files copy an existing macOS dylib or Windows DLL beside the application and test assemblies. The runtime loads `pda_energy` by the operating system's native naming rules. The previous integration issue was that a library in the native source tree was not beside the managed assembly; copying the compiled artifact to the output directory resolves lookup for normal app and test runs. This creates `ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib`; the project copies it beside the app and test assemblies during build. A manual native call with `3600` joules returns `1` watt-hour; the adapter test checks this real conversion.
 
 ## Build and run
 
@@ -146,7 +152,10 @@ The projects target `net10.0`. From the repository root:
 
 ```bash
 dotnet restore PhysicsDataAnalyzer.sln
+mkdir -p ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64  # macOS arm64 only
+clang -arch arm64 -dynamiclib -std=c11 -O2 -Wall -Wextra -Werror -o ThermodynamicsDataAnalyzer/native/energy/build/macos-arm64/libpda_energy.dylib ThermodynamicsDataAnalyzer/native/energy/energy_conversion.c
 dotnet build PhysicsDataAnalyzer.sln
+dotnet test PhysicsDataAnalyzer.sln
 dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj
 ```
 
@@ -223,9 +232,9 @@ dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.cspro
 dotnet test PhysicsDataAnalyzer.sln --no-restore
 ```
 
-The suite has 83 test cases: the previously verified 77 plus three experiment-creation workflow tests and three single-experiment analysis workflow tests. Coverage includes report query values and tie ordering, extension filtering and projection, scoring, deferred conversion and snapshots, real native conversion, adapter input and loading failures, result propagation, accepted/rejected batch processing, experiment creation, and single-experiment lookup and validation failures. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
+The suite has 83 test cases covering report queries, scoring, deferred conversion and snapshots, real native conversion, adapter failures, result propagation, batch processing, experiment creation, and single-experiment analysis. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
 
-The previous full-suite verification with .NET SDK `10.0.400` on 2026-10-31 reported 77 passed, 0 failed, 0 skipped. The six workflow tests added since that run have each passed in focused runs; run the full test command above to verify the current complete suite.
+Verified on 2026-11-14 with .NET SDK `10.0.400` on macOS arm64: 83 passed, 0 failed, 0 skipped. Build the native library first as described above; without it, the two tests that call the real native function fail even though the managed projects compile.
 
 ## Requirement-to-file and method mapping
 

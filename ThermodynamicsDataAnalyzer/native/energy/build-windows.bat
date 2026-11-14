@@ -12,13 +12,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if /I not "%VSCMD_ARG_TGT_ARCH%"=="x64" (
+    echo Error: this script builds windows-x64. Open an x64 Native Tools Command Prompt for Visual Studio.
+    exit /b 1
+)
+
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 if errorlevel 1 (
     echo Error: could not create output directory "%OUTPUT_DIR%".
     exit /b 1
 )
 
-cl.exe /nologo /LD /O2 "%SOURCE_FILE%" /link /OUT:"%OUTPUT_DIR%\pda_energy.dll"
+cl.exe /nologo /LD /O2 /W4 /WX "%SOURCE_FILE%" /link /MACHINE:X64 /OUT:"%OUTPUT_DIR%\pda_energy.dll"
 if errorlevel 1 exit /b %errorlevel%
 
 echo Built "%OUTPUT_DIR%\pda_energy.dll"
