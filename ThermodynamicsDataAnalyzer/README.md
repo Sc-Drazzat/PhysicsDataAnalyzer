@@ -150,17 +150,43 @@ dotnet build PhysicsDataAnalyzer.sln
 dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj
 ```
 
-Run the whole-experiment policy using the default report path:
+## Application workflows
+
+The application supports three distinct user workflows. `whole` and `mean` are calculation policy options within the single- and batch-analysis workflows; they are not separate workflows.
+
+### 1. Create an experiment
+
+Run `create` to enter an experiment ID, material, mass, heater power, reference specific heat capacity, and at least two time/temperature measurements. The app validates the data and saves the experiment as JSON. If no output path is supplied, it saves a timestamp-named file in the default experiments directory.
 
 ```bash
-dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- ThermodynamicsDataAnalyzer/Data/experiments
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- create ThermodynamicsDataAnalyzer/Data/experiments/new-experiment.json
 ```
 
-Choose an explicit output path and the mean-interval policy:
+### 2. Analyze one experiment
+
+Provide the dataset directory and the experiment ID. The app reads the dataset, validates and analyzes the matching experiment, then prints its result as JSON. An optional output path also saves that result as JSON. The policy defaults to `whole`; choose `mean` as the final argument to use the mean-interval estimator.
 
 ```bash
-dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- ThermodynamicsDataAnalyzer/Data/experiments ThermodynamicsDataAnalyzer/Data/reports/my-mean-report.json mean
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- analyze-one ThermodynamicsDataAnalyzer/Data/experiments water-uneven-heating-001 ThermodynamicsDataAnalyzer/Data/reports/water-001.json mean
 ```
+
+To print the result without saving it, omit the output path:
+
+```bash
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- analyze-one ThermodynamicsDataAnalyzer/Data/experiments water-uneven-heating-001
+```
+
+### 3. Analyze a dataset
+
+The existing batch workflow reads every `*.json` file in a dataset directory, analyzes valid experiments, records rejected experiments, builds the combined report, and saves it as JSON. Its command form is `DATASET_DIRECTORY [OUTPUT_JSON] [whole|mean]`; if omitted, the output path is policy-named under `Data/reports` and the policy is `whole`.
+
+```bash
+dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.csproj -- ThermodynamicsDataAnalyzer/Data/experiments ThermodynamicsDataAnalyzer/Data/reports/batch-report-mean.json mean
+```
+
+The options `whole` and `mean` select how specific heat is estimated. Selecting either option does not create an additional workflow.
+
+## Batch workflow errors and outputs
 
 To demonstrate an input error caused by a missing dataset folder:
 
@@ -197,15 +223,16 @@ dotnet run --project ThermodynamicsDataAnalyzer/ThermodynamicsDataAnalyzer.cspro
 dotnet test PhysicsDataAnalyzer.sln --no-restore
 ```
 
-The suite has 77 passing test cases, including more than 8 pure-function and domain cases, two complete report workflow tests, and missing-file and malformed-JSON boundary cases. Coverage includes report query values and tie ordering, extension filtering and projection, scoring, deferred conversion and snapshots, real native conversion, adapter input and loading failures, result propagation, and accepted/rejected batch processing. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
+The suite has 83 test cases: the previously verified 77 plus three experiment-creation workflow tests and three single-experiment analysis workflow tests. Coverage includes report query values and tie ordering, extension filtering and projection, scoring, deferred conversion and snapshots, real native conversion, adapter input and loading failures, result propagation, accepted/rejected batch processing, experiment creation, and single-experiment lookup and validation failures. File-reader boundary tests use temporary paths and remove their directories in `finally` blocks.
 
-Verified with .NET SDK `10.0.400` on 2026-10-31 using `dotnet test ThermodynamicsDataAnalyzer.Tests/ThermodynamicsDataAnalyzer.Tests.csproj --no-restore -m:1 --verbosity quiet`: 77 passed, 0 failed, 0 skipped. The test project build completed with 0 warnings and 0 errors.
+The previous full-suite verification with .NET SDK `10.0.400` on 2026-10-31 reported 77 passed, 0 failed, 0 skipped. The six workflow tests added since that run have each passed in focused runs; run the full test command above to verify the current complete suite.
 
 ## Requirement-to-file and method mapping
 
 | Requirement | Implemented location |
 |---|---|
-| Console boundary handling, CLI policy selection, errors, and output | `ThermodynamicsDataAnalyzer/Program.cs` — dataset and batch `Result` matching, `FindDefaultDatasetPath` |
+| CLI workflows for experiment creation, single-experiment analysis, and batch analysis | `ThermodynamicsDataAnalyzer/Program.cs`; `Commands/CreateExperimentCommand.cs`; `Commands/AnalyzeSingleExperimentCommand.cs`; `Pipeline/ExperimentCreationWorkflow.cs`; `Pipeline/SingleExperimentAnalysisWorkflow.cs` |
+| Console boundary handling, CLI policy selection, errors, and batch output | `ThermodynamicsDataAnalyzer/Program.cs` — dataset and batch `Result` matching, `FindDefaultDatasetPath` |
 | JSON experiment and dataset reading with structured errors | `IO/ExperimentFileReader.cs` — `TryReadExperiment`, `TryReadDataset`; `Models/Result.cs`; `Models/DomainError.cs` |
 | Input data models | `Models/ExperimentInput.cs`, `Models/TemperatureMeasurement.cs`, `Models/ExperimentFileRecord.cs` |
 | Structured domain validation and isolated validated snapshot | `Validation/ExperimentFactory.cs` — `Create`; `Models/Result.cs`; `Models/DomainError.cs`; `Models/ValidatedExperiment.cs` |
